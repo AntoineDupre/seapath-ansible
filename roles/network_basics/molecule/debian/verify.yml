@@ -1,0 +1,18 @@
+---
+# Purpose: assert that the instance really ended up in the expected state.
+# Molecule calls this playbook with `molecule verify`.
+- name: Verify systemd-networkd configuration
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check required file exists
+      ansible.builtin.stat:
+        path: /etc/systemd/network/80-wired.network
+      register: required_file
+
+    - name: Assert required file is present
+      ansible.builtin.assert:
+        that:
+          - required_file.stat.exists
+        fail_msg: "80-wired.network is missing"
+        success_msg: "80-wired.network is present"
