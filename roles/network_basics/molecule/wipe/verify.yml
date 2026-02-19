@@ -1,0 +1,43 @@
+---
+- name: Verify wipe behavior
+  hosts: all
+  gather_facts: false
+  vars:
+    unwanted:
+      - /etc/systemd/network/01-init.network
+      - /etc/systemd/network/00-init-dhcp.network
+      - /etc/systemd/network/00-init.network
+      - /etc/systemd/network/01-installer.network
+      - /etc/systemd/network/99-keep.network
+      - /etc/netplan/50-cloud-init.yaml
+
+  tasks:
+    - name: Assert unwanted files are absent (including keep + netplan)
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ unwanted }}"
+      register: s
+
+    - name: Check absent
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} should have been wiped"
+      loop: "{{ s.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+
+    - name: Required file exists after wipe
+      ansible.builtin.stat:
+        path: /etc/systemd/network/80-wired.network
+      register: wired
+
+    - name: Assert 80-wired exists + perms/owner/group
+      ansible.builtin.assert:
+        that:
+          - wired.stat.exists
+          - wired.stat.mode == "0640"
+          - wired.stat.pw_name == "root"
+          - wired.stat.gr_name == "systemd-network"
+
