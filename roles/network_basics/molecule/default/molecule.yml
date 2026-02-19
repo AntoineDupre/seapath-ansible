@@ -6,9 +6,14 @@ driver:
   name: docker
 
 platforms:
-  - name: instance
-    image: geerlingguy/docker-ubuntu2204-ansible:latest
+  - name: debian 
+    image: "geerlingguy/docker-debian12-ansible:latest"
     privileged: true
+  - name: centos
+    image: "quay.io/centos/centos:stream9"
+    privileged: true
+
+
 
 provisioner:
   name: ansible
