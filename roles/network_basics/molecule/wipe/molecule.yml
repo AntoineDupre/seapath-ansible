@@ -20,3 +20,20 @@ provisioner:
 verifier:
   name: ansible
 
+scenario:
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    # - idempotence   	
+    # Scenario sequence can be edited. Here, disable idempotence test. 
+    # Job is not idempotent due to the fact that it wipe a directory and then copy files in it
+    # An idempotent way is to assert that the config file is the only file in the repo
+    - verify
+    - cleanup
+    - destroy
+
