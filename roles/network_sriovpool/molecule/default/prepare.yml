@@ -1,0 +1,26 @@
+---
+- name: Prepare
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Create a directory for mocked binaries
+      file:
+        path: /tmp/molecule-bin
+        state: directory
+        mode: "0755"
+
+    - name: Initialize mocked libvirt networks database
+      copy:
+        dest: /tmp/molecule-virsh-networks.txt
+        content: ""
+        mode: "0644"
+
+    - name: Install mocked virsh in PATH
+      copy:
+        dest: /tmp/molecule-bin/virsh
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          exit 0

@@ -1,0 +1,14 @@
+- name: Converge
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  environment:
+    PATH: "/tmp/molecule-bin:{{ lookup('env','PATH') }}"
+
+  tasks:
+    - include_role:
+        name: seapath.network_sriovpool
+      vars:
+        network_sriovpool_sriov_network_pool_name: "sriov-pool-test"
+        network_sriovpool_interface: "ens1f0"

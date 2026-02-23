@@ -1,0 +1,21 @@
+---
+- name: Verify
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    network_sriovpool_sriov_network_pool_name: "sriov-pool-test"
+    network_sriovpool_interface: "ens1f0"
+
+  tasks:
+    - name: Ensure temporary XML file has been removed
+      stat:
+        path: /tmp/sriov_network_pool.xml
+      register: tmp_xml
+
+    - name: Assert temporary XML file is absent
+      assert:
+        that:
+          - not tmp_xml.stat.exists
+        fail_msg: |
+          Expected /tmp/sriov_network_pool.xml to be absent after role execution.
