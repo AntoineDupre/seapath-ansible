@@ -2,6 +2,7 @@
 - name: Converge
   hosts: all
   gather_facts: true
+  strategy: linear
   tasks:
     - name: Apply role under test
       ansible.builtin.include_role:

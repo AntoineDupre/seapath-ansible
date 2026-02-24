@@ -2,7 +2,10 @@ driver:
   name: docker
 
 platforms:
-  - name: instance
+  - name: hv1
+    image: geerlingguy/docker-debian12-ansible:latest
+    privileged: true
+  - name: hv2
     image: geerlingguy/docker-debian12-ansible:latest
     privileged: true
 
@@ -11,6 +14,7 @@ provisioner:
   config_options:
     defaults:
       roles_path: "${MOLECULE_PROJECT_DIRECTORY}/.."
+      forks: 1 
   playbooks:
     prepare: prepare.yml
     converge: converge.yml
@@ -18,15 +22,15 @@ provisioner:
   inventory:
     hosts:
       all:
-        hosts:
-          instance:
         children:
           hypervisors:
             hosts:
-              instance:
+              hv1:
+              hv2:
           cluster_machines:
             hosts:
-              instance:
+              hv1:
+              hv2:
 
 verifier:
   name: ansible
