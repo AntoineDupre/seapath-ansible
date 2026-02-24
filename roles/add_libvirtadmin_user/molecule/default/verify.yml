@@ -1,0 +1,55 @@
+---
+- name: Verify libvirtadmin setup (single host)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Check libvirtadmin user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: libvirtadmin
+
+    - name: Assert libvirtadmin home directory exists
+      ansible.builtin.stat:
+        path: /home/libvirtadmin
+      register: libvirt_home
+
+    - name: Validate home directory
+      ansible.builtin.assert:
+        that:
+          - libvirt_home.stat.exists
+          - libvirt_home.stat.isdir
+
+    - name: Check root SSH public key exists
+      ansible.builtin.stat:
+        path: /root/.ssh/id_rsa.pub
+      register: root_pub
+
+    - name: Assert root SSH key exists and is non-empty
+      ansible.builtin.assert:
+        that:
+          - root_pub.stat.exists
+          - root_pub.stat.size | int > 0
+
+    - name: Check authorized_keys exists for libvirtadmin
+      ansible.builtin.stat:
+        path: /home/libvirtadmin/.ssh/authorized_keys
+      register: auth_keys
+
+    - name: Assert authorized_keys exists
+      ansible.builtin.assert:
+        that:
+          - auth_keys.stat.exists
+          - auth_keys.stat.size | int > 0
+
+    - name: Check known_hosts exists for root
+      ansible.builtin.stat:
+        path: /root/.ssh/known_hosts
+      register: known_hosts
+
+    - name: Assert known_hosts exists
+      ansible.builtin.assert:
+        that:
+          - known_hosts.stat.exists

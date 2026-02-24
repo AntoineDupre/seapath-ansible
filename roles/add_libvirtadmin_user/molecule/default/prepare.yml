@@ -1,0 +1,46 @@
+---
+- name: Prepare test environment (Debian 12)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Ensure libvirt group exists
+      ansible.builtin.group:
+        name: libvirt
+        state: present
+
+    - name: Ensure openssh-server is installed
+      ansible.builtin.apt:
+        name: openssh-server
+        state: present
+        update_cache: true
+
+    - name: Ensure ssh host ed25519 key exists
+      ansible.builtin.command:
+        cmd: ssh-keygen -A
+      changed_when: false
+
+    - name: Ensure root .ssh directory exists
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        mode: "0700"
+
+    - name: Ensure known_hosts file exists
+      ansible.builtin.file:
+        path: /root/.ssh/known_hosts
+        state: touch
+        mode: "0600"
+
+- name: Prepare controller buffer directory
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Ensure buffer directory exists on controller
+      ansible.builtin.file:
+        path: buffer
+        state: directory
+        mode: "0755"
