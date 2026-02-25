@@ -14,7 +14,6 @@ provisioner:
   config_options:
     defaults:
       roles_path: "${MOLECULE_PROJECT_DIRECTORY}/.."
-      forks: 1 
   playbooks:
     prepare: prepare.yml
     converge: converge.yml
