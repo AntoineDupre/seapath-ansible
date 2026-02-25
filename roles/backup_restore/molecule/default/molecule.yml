@@ -1,0 +1,33 @@
+driver:
+  name: docker
+
+platforms:
+  - name: hv1
+    image: geerlingguy/docker-debian12-ansible:latest
+    privileged: true
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      roles_path: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  playbooks:
+    prepare: prepare.yml
+    converge: converge.yml
+#     verify: verify.yml
+
+verifier:
+  # name: ansible
+  name: testinfra
+
+
+scenario:
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    # - idempotence 
+    # Disable idempotence test: wipe a directory and deploy a file in it, does not produce idempotent action.
+    - verify
+    - destroy
