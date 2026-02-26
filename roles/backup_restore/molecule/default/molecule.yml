@@ -19,6 +19,8 @@ provisioner:
 verifier:
   # name: ansible
   name: testinfra
+  env:
+    SCRIPTS_SRC_DIR: "${MOLECULE_PROJECT_DIRECTORY}/files/scripts"
 
 
 scenario:

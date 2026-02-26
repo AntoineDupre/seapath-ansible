@@ -1,9 +1,21 @@
 import os
+from pathlib import Path
 import pytest
 
 
-def test_scripts_are_present(host):
-    f = host.file("/usr/local/bin/backup-restore.sh")
+DEST_DIR = Path("/usr/local/bin")
+
+def _scripts():
+    scripts_dir = Path(os.environ["SCRIPTS_SRC_DIR"])
+    return sorted(p.name for p in scripts_dir.iterdir() if p.is_file() and not p.name.startswith("."))
+
+@pytest.fixture(params=_scripts(), ids=str)
+def deployed_script_name(request):
+    return request.param
+
+
+def test_scripts_are_present(host, deployed_script_name):
+    f = host.file(str(DEST_DIR / deployed_script_name))   
     assert f.exists
     assert f.is_file
     assert f.user == "root"
