@@ -1,0 +1,19 @@
+---
+- name: Disable vim defaults
+  lineinfile:
+    dest: /etc/vimrc
+    regexp: '^"? *let g:skip_defaults_vim = 1$'
+    line: "let g:skip_defaults_vim = 1"
+    state: present
+
+- name: Vim color syntax
+  lineinfile:
+    dest: /etc/vimrc
+    regexp: '^"? *syntax on$'
+    line: "syntax on"
+    state: present
+
+- name: Remove vimrc.local file
+  file:
+    path: /etc/vimrc.local
+    state: absent
