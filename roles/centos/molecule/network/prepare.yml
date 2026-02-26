@@ -1,0 +1,23 @@
+---
+- name: Prepare (network)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Ensure NetworkManager is installed (so the role can stop/disable it)
+      ansible.builtin.dnf:
+        name: NetworkManager
+        state: present
+
+    - name: Ensure systemd-networkd unit exists (part of systemd)
+      ansible.builtin.dnf:
+        name: 
+          - systemd
+          - systemd-networkd
+        state: present
+
+    # Best effort: some images don’t ship enabled NM by default, we just ensure units exist.
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

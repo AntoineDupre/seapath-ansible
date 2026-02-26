@@ -1,0 +1,11 @@
+---
+- name: Converge (network only)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Run only network.yml from the role
+      ansible.builtin.include_role:
+        name: centos
+        tasks_from: network.yml

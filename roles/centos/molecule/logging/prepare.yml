@@ -1,0 +1,32 @@
+---
+- name: Prepare (logging)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Ensure EPEL repository is present (if needed)
+      ansible.builtin.dnf:
+        name: epel-release
+        state: present
+      ignore_errors: true   # utile si Stream9 sans EPEL
+
+    - name: Install syslog-ng
+      ansible.builtin.dnf:
+        name: syslog-ng
+        state: present
+      register: syslog_install
+      ignore_errors: true   # retire si tu veux que ça échoue strictement
+
+    - name: Ensure syslog-ng config directory exists
+      ansible.builtin.file:
+        path: /etc/syslog-ng
+        state: directory
+        mode: '0755'
+
+    - name: Enable and start syslog-ng (best effort in container)
+      ansible.builtin.systemd:
+        name: syslog-ng
+        state: started
+        enabled: true
+      ignore_errors: true   # systemd parfois capricieux en container

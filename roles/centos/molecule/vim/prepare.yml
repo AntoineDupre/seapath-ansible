@@ -1,0 +1,11 @@
+---
+- name: Prepare (vim)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Ensure vim is installed
+      ansible.builtin.dnf:
+        name: vim
+        state: present

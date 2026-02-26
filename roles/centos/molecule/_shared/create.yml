@@ -1,0 +1,30 @@
+---
+- name: Create
+  hosts: localhost
+  gather_facts: false
+  vars:
+    image_name: "local/molecule-centos-systemd:stream9"
+    dockerfile_path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/_image/Dockerfile"
+  tasks:
+    - name: Build the Molecule image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        source: build
+        build:
+          path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/_image"
+          dockerfile: Dockerfile
+
+    - name: Create container
+      community.docker.docker_container:
+        name: "instance"
+        hostname: "centos"
+        image: "{{ image_name }}"
+        state: started
+        privileged: true
+        command: /sbin/init
+        tmpfs:
+          - /run
+          - /tmp
+        volumes:
+          - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        cgroupns_mode: host

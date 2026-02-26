@@ -1,0 +1,11 @@
+---
+- name: Converge (users only)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Run only users.yml from role centos
+      ansible.builtin.include_role:
+        name: centos
+        tasks_from: users.yml

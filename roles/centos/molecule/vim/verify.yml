@@ -1,0 +1,38 @@
+---
+- name: Verify (vim)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Read /etc/vimrc
+      ansible.builtin.slurp:
+        path: /etc/vimrc
+      register: vimrc_content
+
+    - name: Decode vimrc content
+      ansible.builtin.set_fact:
+        vimrc_text: "{{ vimrc_content.content | b64decode }}"
+
+    - name: Assert vim defaults disabled
+      ansible.builtin.assert:
+        that:
+          - "'let g:skip_defaults_vim = 1' in vimrc_text"
+        fail_msg: "let g:skip_defaults_vim = 1 not found in /etc/vimrc"
+
+    - name: Assert syntax on enabled
+      ansible.builtin.assert:
+        that:
+          - "'syntax on' in vimrc_text"
+        fail_msg: "syntax on not found in /etc/vimrc"
+
+    - name: Check vimrc.local is absent
+      ansible.builtin.stat:
+        path: /etc/vimrc.local
+      register: vimrc_local
+
+    - name: Assert vimrc.local is removed
+      ansible.builtin.assert:
+        that:
+          - not vimrc_local.stat.exists
+        fail_msg: "/etc/vimrc.local still exists"

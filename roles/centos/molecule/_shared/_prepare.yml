@@ -1,0 +1,33 @@
+- name: Prepare
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Bootstrap Python 3.9 + deps (no Ansible dnf module)
+      ansible.builtin.raw: |
+        set -e
+        dnf -y install python39 python3-libselinux || dnf -y install python39 libselinux-python3
+        dnf -y install vim-minimal
+      changed_when: false
+
+    - name: Install epel
+      ansible.builtin.raw: |
+        set -e
+        dnf -y install epel-release
+        dnf -y makecache
+      changed_when: false
+
+    - name: Enable powertools + install deps
+      ansible.builtin.raw: |
+        set -e
+        dnf -y install dnf-plugins-core || true
+        dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools || true
+        dnf -y makecache
+        dnf -y install json-c
+      changed_when: false
+    
+    - name: Install syslog-ng
+      ansible.builtin.raw: |
+        set -e
+        dnf -y install syslog-ng --nobest
+      changed_when: false

@@ -1,0 +1,7 @@
+- name: Converge
+  hosts: all
+  gather_facts: true
+  tasks:
+    - ansible.builtin.include_role:
+        name: centos
+        tasks_from: vim.yml

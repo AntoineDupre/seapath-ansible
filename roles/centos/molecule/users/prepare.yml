@@ -1,0 +1,12 @@
+---
+- name: Prepare (users)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Set test variables as host facts
+      ansible.builtin.set_fact:
+        admin_user: "{{ admin_user }}"
+        admin_passwd: "{{ admin_passwd }}"
+        admin_ssh_keys: "{{ admin_ssh_keys }}"

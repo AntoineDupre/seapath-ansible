@@ -1,0 +1,74 @@
+---
+- name: Verify (users)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    admin_user: hubert_farnsworth 
+
+  tasks:
+    - name: Check group exists
+      ansible.builtin.getent:
+        database: group
+        key: "{{ admin_user }}"
+      register: group_info
+
+    - name: Assert group exists
+      ansible.builtin.assert:
+        that:
+          - group_info is defined
+          - group_info.ansible_facts.getent_group[admin_user] is defined
+
+    - name: Check user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ admin_user }}"
+      register: user_info
+
+    - name: Assert user exists
+      ansible.builtin.assert:
+        that:
+          - user_info.ansible_facts.getent_passwd[admin_user] is defined
+
+    - name: Check home directory
+      ansible.builtin.stat:
+        path: "/home/{{ admin_user }}"
+      register: home_dir
+
+    - name: Assert home directory exists
+      ansible.builtin.assert:
+        that:
+          - home_dir.stat.exists
+          - home_dir.stat.isdir
+
+    - name: Check authorized_keys
+      ansible.builtin.stat:
+        path: "/home/{{ admin_user }}/.ssh/authorized_keys"
+      register: ssh_keys
+
+    - name: Assert authorized_keys exists
+      ansible.builtin.assert:
+        that:
+          - ssh_keys.stat.exists
+
+    - name: Check sudoers file exists
+      ansible.builtin.stat:
+        path: "/etc/sudoers.d/{{ admin_user }}"
+      register: sudoers_file
+
+    - name: Assert sudoers file exists
+      ansible.builtin.assert:
+        that:
+          - sudoers_file.stat.exists
+
+    - name: Ensure no duplicate sudo line in /etc/sudoers
+      ansible.builtin.command: grep "^{{ admin_user }}" /etc/sudoers
+      register: sudoers_line
+      failed_when: false
+      changed_when: false
+
+    - name: Assert no inline sudoers entry
+      ansible.builtin.assert:
+        that:
+          - sudoers_line.rc != 0

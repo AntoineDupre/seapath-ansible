@@ -1,0 +1,30 @@
+---
+- name: Verify (sysctl)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check sysctl file exists
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/00-panicreboot.conf
+      register: sysctl_file
+
+    - name: Assert sysctl file exists and permissions
+      ansible.builtin.assert:
+        that:
+          - sysctl_file.stat.exists
+          - sysctl_file.stat.isreg
+          - (sysctl_file.stat.mode | string) == "0644"
+        fail_msg: "00-panicreboot.conf missing or bad perms (mode={{ sysctl_file.stat.mode | default('') }})"
+
+    - name: Read sysctl file
+      ansible.builtin.slurp:
+        path: /etc/sysctl.d/00-panicreboot.conf
+      register: sysctl_content
+
+    - name: Assert sysctl file is not empty
+      ansible.builtin.assert:
+        that:
+          - (sysctl_content.content | b64decode | trim) | length > 0
+        fail_msg: "00-panicreboot.conf is empty"

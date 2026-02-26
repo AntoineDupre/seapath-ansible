@@ -1,0 +1,54 @@
+---
+- name: Verify (network)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check NetworkManager enabled state
+      ansible.builtin.command: systemctl is-enabled NetworkManager
+      register: nm_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: Assert NetworkManager is disabled (or not-found)
+      ansible.builtin.assert:
+        that:
+          - nm_enabled.rc != 0 or nm_enabled.stdout in ["disabled", "masked", "static", "indirect"]
+        fail_msg: "NetworkManager should be disabled/masked (rc={{ nm_enabled.rc }}, stdout={{ nm_enabled.stdout }})"
+
+    - name: Check systemd-networkd enabled state
+      ansible.builtin.command: systemctl is-enabled systemd-networkd
+      register: networkd_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: Assert systemd-networkd is enabled
+      ansible.builtin.assert:
+        that:
+          - networkd_enabled.stdout in ["enabled", "enabled-runtime"]
+        fail_msg: "systemd-networkd should be enabled (rc={{ networkd_enabled.rc }}, stdout={{ networkd_enabled.stdout }})"
+
+    - name: Check NetworkManager active state (best effort)
+      ansible.builtin.command: systemctl is-active NetworkManager
+      register: nm_active
+      changed_when: false
+      failed_when: false
+
+    - name: Assert NetworkManager is not active (best effort)
+      ansible.builtin.assert:
+        that:
+          - nm_active.stdout != "active"
+        fail_msg: "NetworkManager should not be active (stdout={{ nm_active.stdout }})"
+
+    - name: Check systemd-networkd active state (best effort)
+      ansible.builtin.command: systemctl is-active systemd-networkd
+      register: networkd_active
+      changed_when: false
+      failed_when: false
+
+    - name: Assert systemd-networkd is active or activating (best effort)
+      ansible.builtin.assert:
+        that:
+          - networkd_active.stdout in ["active", "activating"]
+        fail_msg: "systemd-networkd should be active/activating (stdout={{ networkd_active.stdout }})"

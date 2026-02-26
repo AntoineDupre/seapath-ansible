@@ -1,0 +1,30 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: docker
+
+platforms:
+  - name: instance
+    hostname: centos
+    image: local/molecule-centos-systemd:stream9
+    pre_build_image: true
+    privileged: true
+    command: /sbin/init
+    tmpfs:
+      - /run
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      roles_path: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  playbooks:
+    create: ../_shared/create.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml

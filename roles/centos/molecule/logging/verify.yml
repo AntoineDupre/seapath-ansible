@@ -1,0 +1,143 @@
+---
+- name: Verify (logging)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check /var/log/syslog-ng directory
+      ansible.builtin.stat:
+        path: /var/log/syslog-ng
+      register: syslog_dir
+
+    - name: Assert /var/log/syslog-ng exists and is a directory
+      ansible.builtin.assert:
+        that:
+          - syslog_dir.stat.exists
+          - syslog_dir.stat.isdir
+        fail_msg: "/var/log/syslog-ng is missing or not a directory"
+
+    - name: Assert /var/log/syslog-ng permissions are 0755
+      ansible.builtin.assert:
+        that:
+          - (syslog_dir.stat.mode | string) == "0755"
+        fail_msg: "/var/log/syslog-ng permissions are not 0755 (got {{ syslog_dir.stat.mode }})"
+
+    - name: Check syslog-ng.conf exists
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/syslog-ng.conf
+      register: syslog_conf
+
+    - name: Assert syslog-ng.conf exists and is a file
+      ansible.builtin.assert:
+        that:
+          - syslog_conf.stat.exists
+          - syslog_conf.stat.isreg
+        fail_msg: "/etc/syslog-ng/syslog-ng.conf is missing or not a regular file"
+
+    - name: Assert syslog-ng.conf permissions are 0644
+      ansible.builtin.assert:
+        that:
+          - (syslog_conf.stat.mode | string) == "0644"
+        fail_msg: "/etc/syslog-ng/syslog-ng.conf permissions are not 0644 (got {{ syslog_conf.stat.mode }})"
+
+    - name: Check journald.conf exists
+      ansible.builtin.stat:
+        path: /etc/systemd/journald.conf
+      register: journald_conf
+
+    - name: Assert journald.conf exists and is a file
+      ansible.builtin.assert:
+        that:
+          - journald_conf.stat.exists
+          - journald_conf.stat.isreg
+        fail_msg: "/etc/systemd/journald.conf is missing or not a regular file"
+
+    - name: Assert journald.conf permissions are 0644
+      ansible.builtin.assert:
+        that:
+          - (journald_conf.stat.mode | string) == "0644"
+        fail_msg: "/etc/systemd/journald.conf permissions are not 0644 (got {{ journald_conf.stat.mode }})"
+
+    # --- TLS block checks (only if vars are set) ---
+    - name: TLS - check client cert
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/cert.d/clientcert.pem
+      register: tls_clientcert
+      when:
+        - syslog_tls_ca is defined
+        - syslog_tls_key is defined
+        - syslog_tls_server_ca is defined
+
+    - name: TLS - check client key
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/cert.d/clientkey.pem
+      register: tls_clientkey
+      when:
+        - syslog_tls_ca is defined
+        - syslog_tls_key is defined
+        - syslog_tls_server_ca is defined
+
+    - name: TLS - check server ca
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/ca.d/serverca.pem
+      register: tls_serverca
+      when:
+        - syslog_tls_ca is defined
+        - syslog_tls_key is defined
+        - syslog_tls_server_ca is defined
+
+    - name: TLS - assert files exist
+      ansible.builtin.assert:
+        that:
+          - tls_clientcert.stat.exists
+          - tls_clientkey.stat.exists
+          - tls_serverca.stat.exists
+        fail_msg: "TLS files missing under /etc/syslog-ng/{cert.d,ca.d}"
+      when:
+        - syslog_tls_ca is defined
+        - syslog_tls_key is defined
+        - syslog_tls_server_ca is defined
+
+    - name: TLS - assert permissions
+      ansible.builtin.assert:
+        that:
+          - (tls_clientcert.stat.mode | string) == "0644"
+          - (tls_clientkey.stat.mode | string) == "0400"
+          - (tls_serverca.stat.mode | string) == "0644"
+        fail_msg: >-
+          TLS permissions mismatch:
+          clientcert={{ tls_clientcert.stat.mode }},
+          clientkey={{ tls_clientkey.stat.mode }},
+          serverca={{ tls_serverca.stat.mode }}
+      when:
+        - syslog_tls_ca is defined
+        - syslog_tls_key is defined
+        - syslog_tls_server_ca is defined
+
+    # --- Service state checks (best-effort in containers) ---
+    - name: Check syslog-ng service state (best effort)
+      ansible.builtin.command: systemctl is-active syslog-ng
+      register: syslog_service_state
+      changed_when: false
+      failed_when: false
+
+    - name: Assert syslog-ng is active (if systemctl reports it)
+      ansible.builtin.assert:
+        that:
+          - syslog_service_state.rc == 0
+        fail_msg: "syslog-ng is not active (systemctl output: {{ syslog_service_state.stdout | default('') }})"
+      when: syslog_service_state.stdout is defined and syslog_service_state.stdout != ""
+
+    - name: Check systemd-journald service state (best effort)
+      ansible.builtin.command: systemctl is-active systemd-journald
+      register: journald_service_state
+      changed_when: false
+      failed_when: false
+
+    - name: Assert systemd-journald is active (if systemctl reports it)
+      ansible.builtin.assert:
+        that:
+          - journald_service_state.rc == 0
+        fail_msg: "systemd-journald is not active (systemctl output: {{ journald_service_state.stdout | default('') }})"
+      when: journald_service_state.stdout is defined and journald_service_state.stdout != ""
