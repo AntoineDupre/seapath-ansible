@@ -15,9 +15,7 @@ def test_scripts_are_present(host, deployed_script_name):
 
 def test_no_j2_files_copied(host):
     bin_dir = host.file("/usr/local/bin")
-
     j2_files = [f for f in bin_dir.listdir() if f.endswith(".j2")]
-
     assert j2_files == [], f"Unexpected .j2 files found: {j2_files}"
 
 
