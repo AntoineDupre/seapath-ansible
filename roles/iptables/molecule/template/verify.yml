@@ -1,0 +1,28 @@
+---
+- name: Verify iptables rules from template
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Stat the deployed rules file
+      ansible.builtin.stat:
+        path: /etc/iptables/rules.v4
+      register: iptables_rules_stat
+
+    - name: Assert rules file exists with correct mode
+      ansible.builtin.assert:
+        that:
+          - iptables_rules_stat.stat.exists
+          - iptables_rules_stat.stat.mode == "0644"
+        fail_msg: "/etc/iptables/rules.v4 missing or wrong permissions"
+
+    - name: Read deployed rules content
+      ansible.builtin.slurp:
+        src: /etc/iptables/rules.v4
+      register: iptables_rules_content
+
+    - name: Assert template was rendered with correct port
+      ansible.builtin.assert:
+        that:
+          - "'--dport 8080' in iptables_rules_content.content | b64decode"
+          - "'iptables_test_port' not in iptables_rules_content.content | b64decode"
+        fail_msg: "Template was not rendered correctly — expected port 8080"

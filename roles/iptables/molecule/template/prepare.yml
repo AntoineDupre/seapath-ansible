@@ -1,0 +1,34 @@
+---
+- name: Prepare controller
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Create sample iptables rules template on controller
+      ansible.builtin.copy:
+        dest: /tmp/test-rules.v4.j2
+        content: |
+          *filter
+          :INPUT ACCEPT [0:0]
+          :FORWARD ACCEPT [0:0]
+          :OUTPUT ACCEPT [0:0]
+          -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+          -A INPUT -i lo -j ACCEPT
+          -A INPUT -p tcp --dport {{ '{{ iptables_test_port }}' }} -j ACCEPT
+          COMMIT
+        mode: "0644"
+
+- name: Prepare instance
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install iptables
+      ansible.builtin.apt:
+        name: iptables
+        state: present
+        update_cache: true
+
+    - name: Create /etc/iptables directory
+      ansible.builtin.file:
+        path: /etc/iptables
+        state: directory
+        mode: "0755"

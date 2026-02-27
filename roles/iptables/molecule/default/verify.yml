@@ -1,0 +1,29 @@
+---
+- name: Verify iptables rules file
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Stat the deployed rules file
+      ansible.builtin.stat:
+        path: /etc/iptables/rules.v4
+      register: iptables_rules_stat
+
+    - name: Assert rules file exists with correct mode
+      ansible.builtin.assert:
+        that:
+          - iptables_rules_stat.stat.exists
+          - iptables_rules_stat.stat.mode == "0644"
+        fail_msg: "/etc/iptables/rules.v4 missing or wrong permissions"
+
+    - name: Read deployed rules content
+      ansible.builtin.slurp:
+        src: /etc/iptables/rules.v4
+      register: iptables_rules_content
+
+    - name: Assert rules content matches source
+      ansible.builtin.assert:
+        that:
+          - "'*filter' in iptables_rules_content.content | b64decode"
+          - "'-A INPUT -i lo -j ACCEPT' in iptables_rules_content.content | b64decode"
+          - "'COMMIT' in iptables_rules_content.content | b64decode"
+        fail_msg: "Rules file content does not match expected source"
