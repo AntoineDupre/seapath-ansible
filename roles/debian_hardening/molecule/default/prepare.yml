@@ -1,0 +1,67 @@
+---
+- name: Prepare
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - procps
+          - sudo
+          - openssh-server
+          - login
+          - auditd
+        state: present
+        update_cache: true
+
+    - name: Ensure required directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /etc/default
+        - /etc/sysctl.d
+        - /etc/profile.d
+        - /etc/ssh/sshd_config.d
+        - /etc/sudoers.d
+        - /etc/pam.d
+        - /etc/grub.d
+        - /etc/audit/plugins.d
+        - /etc/audit/rules.d
+        - /etc/systemd/system
+
+    - name: Create grub defaults file
+      ansible.builtin.copy:
+        dest: /etc/default/grub
+        content: |
+          GRUB_CMDLINE_LINUX=""
+        mode: "0644"
+
+    - name: Create grub 10_linux file
+      ansible.builtin.copy:
+        dest: /etc/grub.d/10_linux
+        content: |
+          CLASS="--class gnu-linux --class gnu --class os"
+        mode: "0755"
+
+    - name: Create dummy update-grub command
+      ansible.builtin.copy:
+        dest: /usr/sbin/update-grub
+        content: |
+          #!/bin/sh
+          exit 0
+        mode: "0755"
+
+    - name: Create ssh.service unit file
+      ansible.builtin.copy:
+        dest: /lib/systemd/system/ssh.service
+        content: |
+          [Unit]
+          After=network.target auditd.service
+          [Service]
+          ExecStart=/usr/sbin/sshd -D
+          [Install]
+          WantedBy=multi-user.target
+        mode: "0644"
