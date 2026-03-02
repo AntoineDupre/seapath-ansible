@@ -188,6 +188,8 @@
 - name: Enable docker.service
   ansible.builtin.systemd:
     name: docker.service
+    enabled: true
+    state: started
 
 - name: "Add initramfs-tools scripts: script file (LVM rebooter and log handling)"
   ansible.builtin.copy:
