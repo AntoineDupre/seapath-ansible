@@ -19,3 +19,36 @@
           - not tmp_xml.stat.exists
         fail_msg: |
           Expected /tmp/sriov_network_pool.xml to be absent after role execution.
+
+    - name: Read virsh mock log
+      slurp:
+        src: /tmp/molecule-virsh/virsh.log
+      register: virsh_log_raw
+
+    - name: Decode virsh mock log
+      set_fact:
+        virsh_log: "{{ (virsh_log_raw.content | b64decode).splitlines() }}"
+
+    - name: Assert virsh net-list was called
+      assert:
+        that:
+          - virsh_log | select('search', 'net-list --all') | list | length > 0
+        fail_msg: "Expected 'virsh net-list --all' in virsh.log"
+
+    - name: Assert virsh net-define was called
+      assert:
+        that:
+          - virsh_log | select('search', 'net-define /tmp/sriov_network_pool.xml') | list | length > 0
+        fail_msg: "Expected 'virsh net-define /tmp/sriov_network_pool.xml' in virsh.log"
+
+    - name: Assert virsh net-autostart was called
+      assert:
+        that:
+          - virsh_log | select('search', 'net-autostart ' ~ network_sriovpool_sriov_network_pool_name) | list | length > 0
+        fail_msg: "Expected 'virsh net-autostart {{ network_sriovpool_sriov_network_pool_name }}' in virsh.log"
+
+    - name: Assert virsh net-start was called
+      assert:
+        that:
+          - virsh_log | select('search', 'net-start ' ~ network_sriovpool_sriov_network_pool_name) | list | length > 0
+        fail_msg: "Expected 'virsh net-start {{ network_sriovpool_sriov_network_pool_name }}' in virsh.log"

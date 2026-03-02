@@ -17,10 +17,18 @@
         content: ""
         mode: "0644"
 
+    - name: Create a directory for mocked virsh logs
+      file:
+        path: /tmp/molecule-virsh
+        state: directory
+        mode: "0755"
+
     - name: Install mocked virsh in PATH
       copy:
         dest: /tmp/molecule-bin/virsh
         mode: "0755"
         content: |
           #!/usr/bin/env bash
+          # Log every invocation: timestamp + full command line
+          echo "$(date '+%Y-%m-%d %H:%M:%S') virsh $*" >> /tmp/molecule-virsh/virsh.log
           exit 0
