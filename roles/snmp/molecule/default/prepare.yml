@@ -1,0 +1,68 @@
+# Copyright (C) 2024, RTE (http://www.rte-france.com)
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - snmpd
+          - rsync
+          - cron
+          - sudo
+        state: present
+        update_cache: true
+
+    - name: Ensure snmp group exists with gid 902
+      ansible.builtin.group:
+        name: Debian-snmp
+        gid: 902
+        state: present
+
+    - name: Ensure snmp user exists with uid 902
+      ansible.builtin.user:
+        name: Debian-snmp
+        uid: 902
+        group: Debian-snmp
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Ensure /etc/snmp directory exists
+      ansible.builtin.file:
+        path: /etc/snmp
+        state: directory
+        mode: '0755'
+
+    - name: Ensure /usr/local/bin directory exists
+      ansible.builtin.file:
+        path: /usr/local/bin
+        state: directory
+        mode: '0755'
+
+    - name: Ensure /usr/local/sbin directory exists
+      ansible.builtin.file:
+        path: /usr/local/sbin
+        state: directory
+        mode: '0755'
+
+    - name: Ensure snmpd.service unit file exists
+      ansible.builtin.copy:
+        dest: /lib/systemd/system/snmpd.service
+        content: |
+          [Unit]
+          Description=Simple Network Management Protocol (SNMP) Daemon.
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/sbin/snmpd -LOw -u Debian-snmp -g Debian-snmp -f
+          ExecReload=/bin/kill -HUP $MAINPID
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+        force: false

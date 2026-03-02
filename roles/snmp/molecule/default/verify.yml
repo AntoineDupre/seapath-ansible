@@ -1,0 +1,138 @@
+# Copyright (C) 2024, RTE (http://www.rte-france.com)
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+
+    # -- snmpd.conf template --------------------------------------------------
+    - name: Check snmpd.conf exists
+      ansible.builtin.stat:
+        path: /etc/snmp/snmpd.conf
+      register: snmpd_conf
+
+    - name: Assert snmpd.conf is deployed
+      ansible.builtin.assert:
+        that:
+          - snmpd_conf.stat.exists
+          - snmpd_conf.stat.mode == '0644'
+          - snmpd_conf.stat.pw_name == 'root'
+          - snmpd_conf.stat.gr_name == 'root'
+
+    - name: Read snmpd.conf content
+      ansible.builtin.slurp:
+        src: /etc/snmp/snmpd.conf
+      register: snmpd_conf_content
+
+    - name: Assert snmpd.conf contains expected directives
+      ansible.builtin.assert:
+        that:
+          - "'pass_persist' in snmpd_conf_content.content | b64decode"
+          - "'exposeseapathsnmp.pl' in snmpd_conf_content.content | b64decode"
+          - "'agentAddress udp:127.0.0.1:161' in snmpd_conf_content.content | b64decode"
+
+    # -- PASS AGENT script -----------------------------------------------------
+    - name: Check exposeseapathsnmp.pl exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/exposeseapathsnmp.pl
+      register: pl_script
+
+    - name: Assert exposeseapathsnmp.pl is deployed
+      ansible.builtin.assert:
+        that:
+          - pl_script.stat.exists
+          - pl_script.stat.mode == '0755'
+
+    # -- snmp_getdata.py -------------------------------------------------------
+    - name: Check snmp_getdata.py exists
+      ansible.builtin.stat:
+        path: /usr/local/sbin/snmp_getdata.py
+      register: getdata_script
+
+    - name: Assert snmp_getdata.py is deployed
+      ansible.builtin.assert:
+        that:
+          - getdata_script.stat.exists
+          - getdata_script.stat.mode == '0755'
+
+    - name: Read snmp_getdata.py content
+      ansible.builtin.slurp:
+        src: /usr/local/sbin/snmp_getdata.py
+      register: getdata_content
+
+    - name: Assert snmp_getdata.py uses safe command execution
+      ansible.builtin.assert:
+        that:
+          - "'run_command_safe' in getdata_content.content | b64decode"
+          - "'shell=True' not in getdata_content.content | b64decode
+            or 'run_shell_command' in getdata_content.content | b64decode"
+
+    # -- Cron job --------------------------------------------------------------
+    - name: Check cron job file exists
+      ansible.builtin.stat:
+        path: /etc/cron.d/seapathsnmp
+      register: cron_file
+
+    - name: Assert cron job is deployed
+      ansible.builtin.assert:
+        that:
+          - cron_file.stat.exists
+          - cron_file.stat.mode == '0644'
+
+    - name: Read cron job content
+      ansible.builtin.slurp:
+        src: /etc/cron.d/seapathsnmp
+      register: cron_content
+
+    - name: Assert cron job runs snmp_getdata.py
+      ansible.builtin.assert:
+        that:
+          - "'snmp_getdata.py' in cron_content.content | b64decode"
+
+    # -- Helper scripts in /usr/local/bin/ -------------------------------------
+    - name: Check helper scripts are deployed
+      ansible.builtin.stat:
+        path: "/usr/local/bin/{{ item }}"
+      register: helper_scripts
+      loop:
+        - virt-df.sh
+        - snmp_domstats.sh
+        - snmp_dommemstat.sh
+        - snmp_disk_temps.sh
+        - snmp_smartctl_detail.sh
+
+    - name: Assert all helper scripts exist and are executable
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.executable
+      loop: "{{ helper_scripts.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # -- snmpd.service ---------------------------------------------------------
+    - name: Read snmpd.service unit file
+      ansible.builtin.slurp:
+        src: /lib/systemd/system/snmpd.service
+      register: snmpd_service
+
+    - name: Assert snmpd.service waits for network
+      ansible.builtin.assert:
+        that:
+          - "'After=network-online.target' in snmpd_service.content | b64decode"
+
+    # -- sudoers ---------------------------------------------------------------
+    - name: Check sudoers file exists
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/Debian-snmp
+      register: sudoers_file
+
+    - name: Assert sudoers file is deployed with correct permissions
+      ansible.builtin.assert:
+        that:
+          - sudoers_file.stat.exists
+          - sudoers_file.stat.mode == '0440'
+          - sudoers_file.stat.pw_name == 'root'
+          - sudoers_file.stat.gr_name == 'root'

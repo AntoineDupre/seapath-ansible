@@ -1,0 +1,12 @@
+# Copyright (C) 2024, RTE (http://www.rte-france.com)
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Converge
+  hosts: all
+  gather_facts: false
+  roles:
+    - role: snmp
+  vars:
+    seapath_distro: "Debian"
+    snmp_admin_ip_addr: "127.0.0.1"
