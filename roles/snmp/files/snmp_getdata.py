@@ -2,24 +2,53 @@
 # Copyright (C) 2024, RTE (http://www.rte-france.com)
 # SPDX-License-Identifier: Apache-2.0
 
-import subprocess,json,os,stat
+import subprocess,json,os,stat,re,time
 import xmltodict
 from xml.parsers.expat import ParserCreate, ExpatError, errors
 
-def run_command(command):
-    result = subprocess.check_output(command, shell=True, executable='/bin/bash').decode()
-    return (result)
+def run_command_safe(command_list, timeout=30):
+    """Run a command without shell=True. Returns stdout or empty string on failure."""
+    try:
+        result = subprocess.run(
+            command_list,
+            capture_output=True, text=True, check=False, timeout=timeout,
+        )
+        return result.stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+
+def run_shell_command(command, timeout=30):
+    """Run a shell command (for pipes). Returns stdout or empty string on failure."""
+    try:
+        result = subprocess.run(
+            command, shell=True, executable='/bin/bash',
+            capture_output=True, text=True, check=False, timeout=timeout,
+        )
+        return result.stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+
+def read_cache(cache_file, max_age):
+    """Read a cache file if it exists and is fresh enough. Returns content or None."""
+    if os.path.isfile(cache_file):
+        if (time.time() - os.path.getmtime(cache_file)) <= max_age:
+            with open(cache_file) as cf:
+                return cf.read()
+    return None
+
+def write_cache(cache_file, data):
+    """Write data to a cache file."""
+    with open(cache_file, "w") as cf:
+        cf.write(data)
 
 def writeline(oid,line):
     f.write(oid + ":" + line + "\n")
 
 def singlelinetooid(oid,title,line):
-#    writeline(oid, title)
     line = line.lstrip().rstrip()
     writeline(oid + ".0", line)
 
 def multilinetooid(oid,title,multistr):
-#    writeline(oid, title)
     linenumber = 0
     for line in multistr.splitlines():
         linenumber = linenumber + 1
@@ -28,7 +57,6 @@ def multilinetooid(oid,title,multistr):
     writeline(oid + ".0", str(linenumber))
 
 def dictarrayoid(oid,title,a):
-#    writeline(oid, title)
     keys = list(a[0].keys())
     for key in keys:
         writeline(oid + ".0." + str(keys.index(key)), key)
@@ -40,16 +68,6 @@ base_oid = ""
 snmpdata_tmp = "/tmp/snmpdata_tmp.txt"
 snmpdata = "/tmp/snmpdata.txt"
 f = open(snmpdata_tmp, "w")
-
-grep = "/usr/bin/grep"
-sort = "/usr/bin/sort"
-awk = "/usr/bin/awk"
-sed = "/usr/bin/sed"
-tr = "/usr/bin/tr"
-head = "/usr/bin/head"
-echo = "/usr/bin/echo"
-jq = "/usr/bin/jq"
-cut = "/usr/bin/cut"
 
 # .1 --> "other" multiline values
 # .2 --> "other" monoline values
@@ -75,70 +93,90 @@ def exist_and_is_character(filepath):
 if exist_and_is_character("/dev/ipmi0") or exist_and_is_character("/dev/ipmi/0") or exist_and_is_character("/dev/ipmidev/0"):
     for i in range(1,5):
         if i == 1:
-            command = f""" {ipmitool} sensor | {sed} -e "s/ *| */;/g" """
             title = "ipmitool sensor"
-            data = run_command(command)
+            raw = run_command_safe([ipmitool, "sensor"])
+            data = re.sub(r' *\| *', ';', raw)
         elif i == 2:
-            command = f""" {ipmitool} sensor -v """
             title = "ipmitool sensor verbose"
-            data = run_command(command)
+            data = run_command_safe([ipmitool, "sensor", "-v"])
         elif i == 3:
-            command = f""" {ipmitool} sdr list | {sed} -e "s/ *| */;/g" """
             title = "ipmitool sdr"
-            data = run_command(command)
+            raw = run_command_safe([ipmitool, "sdr", "list"])
+            data = re.sub(r' *\| *', ';', raw)
         elif i == 4:
-            command = f""" {ipmitool} sdr list -v"""
             title = "ipmitool sdr verbose"
-            data = run_command(command)
+            data = run_command_safe([ipmitool, "sdr", "list", "-v"])
         multilinetooid(base_oid + ".4." + str(i), title, data)
 
 # RAID
 arcconf = "/usr/local/sbin/arcconf"
 if os.path.isfile(arcconf):
     # get temperatures
-    command = f""" {arcconf} GETCONFIG 1 PD | {grep} "Current Temperature" | {awk} '{{ print $4 }}' """
-    data = run_command(command)
+    raw = run_command_safe([arcconf, "GETCONFIG", "1", "PD"])
     linenumber = 0
-    for line in data.splitlines():
-        linenumber = linenumber + 1
-        line = line.lstrip().rstrip()
-        singlelinetooid(base_oid + ".3.1."+str(linenumber), "temperature disk " + str(linenumber), line)
+    for line in raw.splitlines():
+        line = line.strip()
+        if "Current Temperature" in line:
+            parts = line.split()
+            if len(parts) >= 4:
+                linenumber = linenumber + 1
+                singlelinetooid(base_oid + ".3.1."+str(linenumber), "temperature disk " + str(linenumber), parts[3])
 
-    command = f""" {arcconf} GETCONFIG 1  | {grep} "S.M.A.R.T. warnings" | {awk} '{{ print $4 }}' """
-    data = run_command(command)
+    raw = run_command_safe([arcconf, "GETCONFIG", "1"])
     linenumber = 0
-    for line in data.splitlines():
-        linenumber = linenumber + 1
-        line = line.lstrip().rstrip()
-        singlelinetooid(base_oid + ".3.2."+str(linenumber), "SMART Warnings disk " + str(linenumber), line)
-        if line != "0":
-            replacedisk[linenumber-1] = "RAID SMART Warnings on disk"+str(linenumber)
-            globalreplacedisk = "RAID SMART Warnings on one disk"
+    for line in raw.splitlines():
+        line = line.strip()
+        if "S.M.A.R.T. warnings" in line:
+            parts = line.split()
+            if len(parts) >= 4:
+                linenumber = linenumber + 1
+                val = parts[3]
+                singlelinetooid(base_oid + ".3.2."+str(linenumber), "SMART Warnings disk " + str(linenumber), val)
+                if val != "0":
+                    replacedisk[linenumber-1] = "RAID SMART Warnings on disk"+str(linenumber)
+                    globalreplacedisk = "RAID SMART Warnings on one disk"
 
-    command = f""" {arcconf} GETCONFIG 1  | {grep} "S.M.A.R.T. warnings" | {awk} '{{sum += $4}} END {{print sum}}' """
+    # Sum of SMART warnings
+    raw = run_command_safe([arcconf, "GETCONFIG", "1"])
+    smart_sum = 0
+    for line in raw.splitlines():
+        if "S.M.A.R.T. warnings" in line:
+            parts = line.split()
+            if len(parts) >= 4:
+                try:
+                    smart_sum += int(parts[3])
+                except ValueError:
+                    pass
     title = "ARCCONF sum of SMART WARNINGS"
-    data = run_command(command)
-    data = data.lstrip().rstrip()
+    data = str(smart_sum)
     singlelinetooid(base_oid + ".3.3", title, data)
     if data != "0" and data != "":
         globalreplacedisk = "RAID SMART Warnings on one disk"
 
-    command = f""" {arcconf} GETCONFIG 1 AR | {grep} -E "Device [0-9]" | {cut} -d":" -f2 | {awk} '{{ print $1 }}' """
-    data = run_command(command)
+    raw = run_command_safe([arcconf, "GETCONFIG", "1", "AR"])
     linenumber = 0
-    for line in data.splitlines():
-        title = f"RAID array device {linenumber} status"
-        linenumber = linenumber + 1
-        line = line.lstrip().rstrip()
-        singlelinetooid(base_oid + ".3.4."+str(linenumber), title, line)
-        if line != "Present":
-            replacedisk[linenumber-1] = 1
+    for line in raw.splitlines():
+        if re.search(r'Device [0-9]', line):
+            parts = line.split(":")
+            if len(parts) >= 2:
+                title = f"RAID array device {linenumber} status"
+                linenumber = linenumber + 1
+                val = parts[1].split()[0] if parts[1].split() else ""
+                singlelinetooid(base_oid + ".3.4."+str(linenumber), title, val)
+                if val != "Present":
+                    replacedisk[linenumber-1] = 1
 
     for i in range(0,4):
-        command = f""" {arcconf} GETCONFIG 1 PD 0 {i} | {grep} "S.M.A.R.T. warnings" | {awk} '{{ print $4 }}' """
+        raw = run_command_safe([arcconf, "GETCONFIG", "1", "PD", "0", str(i)])
         title = f"ARCCONF SMART WARNINGS device {i+1}"
-        data = run_command(command)
-        data = data.lstrip().rstrip()
+        data = ""
+        for line in raw.splitlines():
+            if "S.M.A.R.T. warnings" in line:
+                parts = line.split()
+                if len(parts) >= 4:
+                    data = parts[3]
+                break
+        data = data.strip()
         if data != "0" and data!="":
             replacedisk[i] = 1
         singlelinetooid(base_oid + ".3.5."+str(i+1)+".1", title, data)
@@ -155,174 +193,146 @@ if os.path.isfile(arcconf):
 
 i = 0
 for disk in ["sda","sdb","sdc","sdd"]:
-    command = f""" /usr/sbin/smartctl -H /dev/{disk} | {grep} "SMART overall-health self-assessment test result: " | {sed} "s/SMART overall-health self-assessment test result: //" """
-    title = f"""smartctl /dev/{disk}"""
-    data = run_command(command)
-    data = data.lstrip().rstrip()
+    raw = run_command_safe(["/usr/sbin/smartctl", "-H", f"/dev/{disk}"])
+    title = f"smartctl /dev/{disk}"
+    data = ""
+    for line in raw.splitlines():
+        if "SMART overall-health self-assessment test result: " in line:
+            data = line.replace("SMART overall-health self-assessment test result: ", "").strip()
+            break
     if data != "PASSED" and data != "":
         replacedisk[i] = 1
     i = i + 1
     singlelinetooid(base_oid + ".2." + str(i), title, data)
 
-command = f""" /usr/sbin/lvs -a -o +devices,lv_health_status --reportformat json | {jq} -c .report[].lv """
+raw = run_command_safe(["/usr/sbin/lvs", "-a", "-o", "+devices,lv_health_status", "--reportformat", "json"])
 title = "lvs full status json"
-data = run_command(command)
-data = json.loads(data)
-dictarrayoid(base_oid + ".2.5", title, data)
+if raw:
+    lvs_json = json.loads(raw)
+    data = lvs_json.get("report", [{}])[0].get("lv", [])
+    dictarrayoid(base_oid + ".2.5", title, data)
 
 for i in range(6,11):
     if i == 6:
-        command = f"""
-/usr/sbin/smartctl --scan | {grep} -E "^/dev/(sd|nvme)" | {awk} '{{ print $1 }}' | while read i; do /usr/sbin/smartctl -H $i | {grep} "SMART overall-health self-assessment test result: " | {grep} -v "SMART overall-health self-assessment test result: PASSED"; done | /usr/bin/wc -l """
+        # Check all disks SMART status
+        scan_raw = run_command_safe(["/usr/sbin/smartctl", "--scan"])
         title = "disk smartctl status"
-        data = run_command(command)
-        data = data.lstrip().rstrip()
-        if data == "0":
+        fail_count = 0
+        for line in scan_raw.splitlines():
+            dev = line.split()[0] if line.split() else ""
+            if not re.match(r'^/dev/(sd|nvme)', dev):
+                continue
+            health_raw = run_command_safe(["/usr/sbin/smartctl", "-H", dev])
+            for hline in health_raw.splitlines():
+                if "SMART overall-health self-assessment test result: " in hline:
+                    result_val = hline.replace("SMART overall-health self-assessment test result: ", "").strip()
+                    if result_val != "PASSED":
+                        fail_count += 1
+                    break
+        if fail_count == 0:
             data = "SMARTOK"
         else:
             data = "SMARTPROBLEM"
             globalreplacedisk = "SMART tests not passed"
     elif i == 7:
-        command = f""" /usr/sbin/lvs -a -o +devices,lv_health_status --reportformat json | {jq} -c . """
+        raw = run_command_safe(["/usr/sbin/lvs", "-a", "-o", "+devices,lv_health_status", "--reportformat", "json"])
         title = "lvs full status json"
-        data = run_command(command)
-    elif i == 8:
-        command = f""" /usr/sbin/lvs -o name,lv_health_status --reportformat json | {jq} -c . """
-        title = "lvs basic status json"
-        data = run_command(command)
-    elif i == 9:
-        command = f""" /usr/sbin/lvs -o name,lv_health_status --reportformat json | {jq} -c '.report[].lv[] | select( .lv_health_status != "" )' """
-        title = "lvs sumup status"
-        data = run_command(command)
-        if data == "":
-            data = "NO LVS PROBLEM"
+        if raw:
+            data = json.dumps(json.loads(raw), separators=(',', ':'))
         else:
-            data = "LVS PROBLEM: " + data
-            globalreplacedisk = "LVS health not OK"
+            data = ""
+    elif i == 8:
+        raw = run_command_safe(["/usr/sbin/lvs", "-o", "name,lv_health_status", "--reportformat", "json"])
+        title = "lvs basic status json"
+        if raw:
+            data = json.dumps(json.loads(raw), separators=(',', ':'))
+        else:
+            data = ""
+    elif i == 9:
+        raw = run_command_safe(["/usr/sbin/lvs", "-o", "name,lv_health_status", "--reportformat", "json"])
+        title = "lvs sumup status"
+        data = ""
+        if raw:
+            lvs_data = json.loads(raw)
+            problems = []
+            for lv in lvs_data.get("report", [{}])[0].get("lv", []):
+                if lv.get("lv_health_status", "") != "":
+                    problems.append(json.dumps(lv, separators=(',', ':')))
+            if problems:
+                data = "LVS PROBLEM: " + "".join(problems)
+                globalreplacedisk = "LVS health not OK"
+            else:
+                data = "NO LVS PROBLEM"
     elif i == 10:
-        command = f""" ceph status --format json-pretty | {jq} -c -r .health.status """
+        raw = run_command_safe(["/usr/bin/ceph", "status", "--format", "json-pretty"])
         title = "ceph health status"
-        data = run_command(command)
+        data = ""
+        if raw:
+            try:
+                ceph_data = json.loads(raw)
+                data = ceph_data.get("health", {}).get("status", "")
+            except json.JSONDecodeError:
+                data = ""
     singlelinetooid(base_oid + ".2." + str(i), title, data)
 
 # OTHER MULTILINES VALUES
 for i in range(1,12):
     if i == 1:
-        command = f""" /usr/sbin/crm status"""
-        title = command
-        data = run_command(command)
+        title = "/usr/sbin/crm status"
+        data = run_command_safe(["/usr/sbin/crm", "status"])
     elif i == 2:
-        command = f"""
-FILE=/tmp/domstats.txt
-if [ -f $FILE ]
-then
-  OLDTIME=120
-  CURTIME=$(date +%s)
-  FILETIME=$(stat $FILE -c %Y)
-  TIMEDIFF=$(expr $CURTIME - $FILETIME)
-  if [ $TIMEDIFF -gt $OLDTIME ]; then
-    /usr/bin/date +%s > $FILE
-    /usr/bin/virsh --connect qemu:///system domstats >> $FILE
-  fi
-else
-  /usr/bin/date +%s > $FILE
-  /usr/bin/virsh --connect qemu:///system domstats >> $FILE
-fi
-cat $FILE
-"""
         title = "virsh domstats"
-        data = run_command(command)
+        cached = read_cache("/tmp/domstats.txt", 120)
+        if cached is not None:
+            data = cached
+        else:
+            data = run_command_safe(["/usr/local/bin/snmp_domstats.sh"], timeout=120)
+            write_cache("/tmp/domstats.txt", data)
     elif i == 3:
-        command = f"""
-FILE=/tmp/dommemstat.txt
-function create_or_rewrite {{
-  /usr/bin/virsh --connect qemu:///system list --name | sed -s "/^$/d" | while read i
-  do
-    echo Domain: \'$i\'
-    /usr/bin/virsh --connect qemu:///system dommemstat --domain $i
-  done > $FILE
-}}
-if [ -f $FILE ]
-then
-  OLDTIME=120
-  CURTIME=$(date +%s)
-  FILETIME=$(stat $FILE -c %Y)
-  TIMEDIFF=$(expr $CURTIME - $FILETIME)
-
-  if [ $TIMEDIFF -gt $OLDTIME ]; then
-    create_or_rewrite
-  fi
-else
-  create_or_rewrite
-fi
-cat $FILE
-"""
         title = "virsh dommemstat"
-        data = run_command(command)
+        cached = read_cache("/tmp/dommemstat.txt", 120)
+        if cached is not None:
+            data = cached
+        else:
+            data = run_command_safe(["/usr/local/bin/snmp_dommemstat.sh"], timeout=120)
+            write_cache("/tmp/dommemstat.txt", data)
     elif i == 4:
-        command = f""" /usr/bin/ceph status """
         title = "ceph status"
-        data = run_command(command)
+        data = run_command_safe(["/usr/bin/ceph", "status"])
     elif i == 5:
-        command = f"""
-FILE=/tmp/virt-df.txt
-if [ -f $FILE ]
-then
-  OLDTIME=3600
-  CURTIME=$(date +%s)
-  FILETIME=$(stat $FILE -c %Y)
-  TIMEDIFF=$(expr $CURTIME - $FILETIME)
-  if [ $TIMEDIFF -gt $OLDTIME ]; then
-    /usr/local/bin/virt-df.sh > $FILE
-  fi
-else
-  /usr/local/bin/virt-df.sh > $FILE
-fi
-cat $FILE
-"""
         title = "virt-df"
-        data = run_command(command)
+        cached = read_cache("/tmp/virt-df.txt", 3600)
+        if cached is not None:
+            data = cached
+        else:
+            data = run_command_safe(["/usr/local/bin/virt-df.sh"], timeout=120)
+            write_cache("/tmp/virt-df.txt", data)
     elif i == 6:
-        command = f""" /usr/bin/virsh -c qemu:///system list --all """
         title = "virsh list"
-        data = run_command(command)
+        data = run_command_safe(["/usr/bin/virsh", "-c", "qemu:///system", "list", "--all"])
     elif i == 7:
-        command = f""" /usr/bin/ceph status --format=json | {jq} -c .pgmap """
         title = "ceph usage"
-        data = run_command(command)
+        raw = run_command_safe(["/usr/bin/ceph", "status", "--format=json"])
+        data = ""
+        if raw:
+            try:
+                ceph_data = json.loads(raw)
+                pgmap = ceph_data.get("pgmap", {})
+                data = json.dumps(pgmap, separators=(',', ':'))
+            except json.JSONDecodeError:
+                data = ""
     elif i == 8:
-        command = f"""
-/usr/sbin/smartctl --scan | {awk} '{{ print $1 }}' | while read i; do
-  temp=$(/usr/sbin/smartctl -a $i | {grep} Temperature_Celsius | {awk} '{{ print $10 }}')
-  if [ ! -z "$temp" ]
-  then
-    {echo} "$i;$temp"
-  fi
-done
-"""
         title = "temperature disks"
-        data = run_command(command)
+        data = run_command_safe(["/usr/local/bin/snmp_disk_temps.sh"])
     elif i == 9:
-        command = f"""
-/usr/sbin/smartctl --scan | {grep} -E "^/dev/(sd|nvme)" | {awk} '{{ print $1 }}' | while read i; do
-  {echo} $i
-  j=$({echo} $i | {sed} "s|/dev/||")
-  k=$(/usr/bin/udevadm info -q symlink --path=/sys/block/$j | {tr} " " "\n" | {sort} | {grep} 'disk/by-path' | {head} -n 1 | {awk} '{{ print "/dev/" $1 }}')
-  {echo} $k
-  /usr/sbin/smartctl --attributes -H $i | {sed} '0,/^=== START OF READ SMART DATA SECTION ===$/d'
-  {echo} ------------------------------------------
-done
-"""
         title = "smartctl"
-        data = run_command(command)
+        data = run_command_safe(["/usr/local/bin/snmp_smartctl_detail.sh"], timeout=60)
     elif i == 10:
-        command = f""" /usr/sbin/lvs -a -o +devices,lv_health_status """
         title = "lvs status"
-        data = run_command(command)
+        data = run_command_safe(["/usr/sbin/lvs", "-a", "-o", "+devices,lv_health_status"])
     elif i == 11:
-        command = f""" /usr/sbin/crm status --as-xml """
         title = "crm status json"
-        xml_status = run_command(command)
+        xml_status = run_command_safe(["/usr/sbin/crm", "status", "--as-xml"])
         try:
             dict_status = xmltodict.parse(xml_status, attr_prefix='')
             data = json.dumps(dict_status)
@@ -331,8 +341,8 @@ done
             data2 = json.dumps(dict_status["crm_mon"]["nodes"])
             multilinetooid(base_oid + ".1.11.0.2", title + " nodes", data2)
             continue
-        except ExpatError:
-            pass
+        except (ExpatError, KeyError):
+            data = xml_status
 
 
     multilinetooid(base_oid + ".1." + str(i), title, data)
