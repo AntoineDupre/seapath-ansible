@@ -3,6 +3,8 @@
 ---
 galaxy_info:
   author: "Seapath"
+  role_name: backup_restore
+  namespace: seapath
   description: "Installs the backup-restore utility"
   license: Apache-2.0
   min_ansible_version: 2.9.10

@@ -1,0 +1,67 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install python3-lxml
+      ansible.builtin.apt:
+        name: python3-lxml
+        state: present
+        update_cache: true
+
+    - name: Create test directory
+      ansible.builtin.file:
+        path: /tmp/test_scripts
+        state: directory
+        mode: "0755"
+
+    - name: Copy remove_disk_xml.py to instance
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/files/scripts/remove_disk_xml.py"
+        dest: /tmp/test_scripts/remove_disk_xml.py
+        mode: "0755"
+
+    - name: Create test XML with disk elements
+      ansible.builtin.copy:
+        dest: /tmp/test_scripts/input_with_disks.xml
+        mode: "0644"
+        content: |
+          <domain type='kvm'>
+            <name>test-vm</name>
+            <memory unit='KiB'>1048576</memory>
+            <devices>
+              <disk type='network' device='disk'>
+                <driver name='qemu' type='raw'/>
+                <source protocol='rbd' name='pool/volume'>
+                  <host name='mon1' port='6789'/>
+                </source>
+                <target dev='vda' bus='virtio'/>
+              </disk>
+              <disk type='file' device='cdrom'>
+                <source file='/var/lib/libvirt/images/boot.iso'/>
+                <target dev='hda' bus='ide'/>
+              </disk>
+              <interface type='bridge'>
+                <source bridge='br0'/>
+                <model type='virtio'/>
+              </interface>
+              <console type='pty'/>
+            </devices>
+          </domain>
+
+    - name: Create test XML without disk elements
+      ansible.builtin.copy:
+        dest: /tmp/test_scripts/input_no_disks.xml
+        mode: "0644"
+        content: |
+          <domain type='kvm'>
+            <name>test-vm-nodisk</name>
+            <memory unit='KiB'>524288</memory>
+            <devices>
+              <interface type='bridge'>
+                <source bridge='br0'/>
+                <model type='virtio'/>
+              </interface>
+              <console type='pty'/>
+            </devices>
+          </domain>

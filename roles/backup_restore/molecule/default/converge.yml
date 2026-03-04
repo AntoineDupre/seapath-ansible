@@ -1,0 +1,18 @@
+---
+- name: Converge - run remove_disk_xml.py against test inputs
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Run script on XML with disk elements
+      ansible.builtin.command:
+        cmd: >-
+          python3 /tmp/test_scripts/remove_disk_xml.py
+          /tmp/test_scripts/input_with_disks.xml
+          /tmp/test_scripts/output_with_disks.xml
+
+    - name: Run script on XML without disk elements
+      ansible.builtin.command:
+        cmd: >-
+          python3 /tmp/test_scripts/remove_disk_xml.py
+          /tmp/test_scripts/input_no_disks.xml
+          /tmp/test_scripts/output_no_disks.xml

@@ -1,0 +1,65 @@
+---
+- name: Verify remove_disk_xml.py behavior
+  hosts: all
+  gather_facts: false
+  tasks:
+    # --- Test 1: XML with disks -> disks removed ---
+
+    - name: Check output file was created
+      ansible.builtin.stat:
+        path: /tmp/test_scripts/output_with_disks.xml
+      register: output_file
+
+    - name: Assert output file exists
+      ansible.builtin.assert:
+        that: output_file.stat.exists
+        fail_msg: "output_with_disks.xml was not created"
+
+    - name: Read output XML content
+      ansible.builtin.slurp:
+        src: /tmp/test_scripts/output_with_disks.xml
+      register: output_content
+
+    - name: Decode output content
+      ansible.builtin.set_fact:
+        output_xml: "{{ output_content.content | b64decode }}"
+
+    - name: Assert no disk elements remain
+      ansible.builtin.assert:
+        that: "'<disk' not in output_xml"
+        fail_msg: "Output XML still contains <disk> elements"
+
+    - name: Assert non-disk devices are preserved
+      ansible.builtin.assert:
+        that:
+          - "'<interface' in output_xml"
+          - "'<console' in output_xml"
+        fail_msg: "Non-disk device elements were incorrectly removed"
+
+    - name: Assert domain structure is preserved
+      ansible.builtin.assert:
+        that:
+          - "'<name>test-vm</name>' in output_xml"
+          - "'<memory' in output_xml"
+          - "'<devices>' in output_xml or '<devices/>' in output_xml"
+        fail_msg: "Domain structure was not preserved"
+
+    # --- Test 2: XML without disks -> unchanged ---
+
+    - name: Read output XML with no disks
+      ansible.builtin.slurp:
+        src: /tmp/test_scripts/output_no_disks.xml
+      register: nodisk_output
+
+    - name: Decode no-disk output
+      ansible.builtin.set_fact:
+        nodisk_xml: "{{ nodisk_output.content | b64decode }}"
+
+    - name: Assert XML without disks passes through unchanged
+      ansible.builtin.assert:
+        that:
+          - "'<interface' in nodisk_xml"
+          - "'<console' in nodisk_xml"
+          - "'<name>test-vm-nodisk</name>' in nodisk_xml"
+          - "'<disk' not in nodisk_xml"
+        fail_msg: "XML without disks was not preserved correctly"
