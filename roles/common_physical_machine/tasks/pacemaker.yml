@@ -1,0 +1,38 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Setup pacemaker service if needed
+  when:
+    - common_physical_machine_check_service_exists | default(true)
+  block:
+    - name: Create pacemaker.service.d directory
+      file:
+        path: /etc/systemd/system/pacemaker.service.d/
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+    - name: Copy pacemaker.service drop-in
+      template:
+        src: pacemaker_override.conf.j2
+        dest: /etc/systemd/system/pacemaker.service.d/override.conf
+        owner: root
+        group: root
+        mode: 0644
+      notify: Trigger daemon-reload
+      register: common_physical_machine_pacemaker_corosync
+    - name: Get Pacemaker service Status
+      ansible.builtin.systemd:
+        name: "pacemaker.service"
+      register: common_physical_machine_pacemaker_service_status
+    - name: Disable pacemaker (reinstall step 1/2)
+      ansible.builtin.systemd:
+        name: pacemaker.service
+        enabled: no
+      when: common_physical_machine_pacemaker_corosync.changed and common_physical_machine_pacemaker_service_status.status.UnitFileState == "enabled"
+    - name: Enable pacemaker (reinstall step 2/2)
+      ansible.builtin.systemd:
+        name: pacemaker.service
+        enabled: yes
+      when: common_physical_machine_pacemaker_corosync.changed and common_physical_machine_pacemaker_service_status.status.UnitFileState == "enabled"

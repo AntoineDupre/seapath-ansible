@@ -1,0 +1,6 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+common_physical_machine_check_service_exists: true
+common_physical_machine_pacemaker_wants_virtqemud: false

@@ -1,0 +1,27 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Create src folder on hosts
+  file:
+    path: /tmp/src
+    state: directory
+    mode: '0755'
+
+- name: Temp fix for synchronize to force evaluate variables
+  set_fact:
+    ansible_host: "{{ ansible_host }}"
+
+- name: Deploy vm_manager
+  include_role:
+    name: deploy_vm_manager
+
+- name: Deploy python3-setup-ovs
+  include_role:
+    name: deploy_python3_setup_ovs
+
+- name: Create /usr/lib/ocf/resource.d/seapath on hosts
+  file:
+    path: /usr/lib/ocf/resource.d/seapath
+    state: directory
+    mode: '0755'

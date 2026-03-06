@@ -1,0 +1,16 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Copy chrony-wait.service
+  template:
+    src: chrony-wait.service.j2
+    dest: /etc/systemd/system/chrony-wait.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Trigger daemon-reload
+- name: Enable chrony-wait.service
+  ansible.builtin.systemd:
+    name: chrony-wait.service
+    enabled: yes

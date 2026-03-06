@@ -1,6 +1,10 @@
 [Unit]
 Wants=libvirtd.service
 After=libvirtd.service
+{% if common_physical_machine_pacemaker_wants_virtqemud | default(false) %}
+Wants=virtqemud.service
+After=virtqemud.service
+{% endif %}
 
 [Install]
 WantedBy=corosync.service
