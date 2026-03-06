@@ -3,6 +3,7 @@
 ---
 galaxy_info:
   author: "Seapath"
+  namespace: "seapath"
   description: applies the SEAPATH prerequisites for any Debian physical machine (hypervisor, observer, or standalone)
   license: Apache-2.0
   min_ansible_version: 2.9.10
