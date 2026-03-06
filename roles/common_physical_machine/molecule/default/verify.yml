@@ -1,0 +1,140 @@
+---
+- name: Verify common_physical_machine tasks
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    # --- Sysctl ---
+    - name: Check bridge_nf_call sysctl file
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/00-bridge_nf_call.conf
+      register: common_pm_bridge_nf
+
+    - name: Assert bridge_nf_call conf exists
+      ansible.builtin.assert:
+        that:
+          - common_pm_bridge_nf.stat.exists
+
+    - name: Read bridge_nf_call content
+      ansible.builtin.slurp:
+        path: /etc/sysctl.d/00-bridge_nf_call.conf
+      register: common_pm_bridge_nf_content
+
+    - name: Assert bridge_nf_call content
+      ansible.builtin.assert:
+        that:
+          - "'net.bridge.bridge-nf-call-iptables = 0' in (common_pm_bridge_nf_content.content | b64decode)"
+          - "'net.bridge.bridge-nf-call-ip6tables = 0' in (common_pm_bridge_nf_content.content | b64decode)"
+
+    # --- Chrony-wait ---
+    - name: Check chrony-wait service file
+      ansible.builtin.stat:
+        path: /etc/systemd/system/chrony-wait.service
+      register: common_pm_chrony
+
+    - name: Assert chrony-wait service exists
+      ansible.builtin.assert:
+        that:
+          - common_pm_chrony.stat.exists
+
+    - name: Read chrony-wait service
+      ansible.builtin.slurp:
+        path: /etc/systemd/system/chrony-wait.service
+      register: common_pm_chrony_content
+
+    - name: Assert chrony-wait content
+      ansible.builtin.assert:
+        that:
+          - "'chronyc' in (common_pm_chrony_content.content | b64decode)"
+          - "'After=timemaster.service' in (common_pm_chrony_content.content | b64decode)"
+
+    # --- Logstash ---
+    - name: Read /etc/hosts
+      ansible.builtin.slurp:
+        path: /etc/hosts
+      register: common_pm_hosts
+
+    - name: Assert logstash entry in hosts
+      ansible.builtin.assert:
+        that:
+          - "'192.168.1.100 logstash-seapath' in (common_pm_hosts.content | b64decode)"
+        fail_msg: "logstash-seapath entry missing from /etc/hosts"
+
+    # --- Libvirt ---
+    - name: Read libvirtd.conf
+      ansible.builtin.slurp:
+        path: /etc/libvirt/libvirtd.conf
+      register: common_pm_libvirt
+
+    - name: Assert host_uuid_source is set to machine-id
+      ansible.builtin.assert:
+        that:
+          - "'host_uuid_source = \"machine-id\"' in (common_pm_libvirt.content | b64decode)"
+        fail_msg: "libvirtd.conf missing host_uuid_source = machine-id"
+
+    # --- Pacemaker ---
+    - name: Check pacemaker override directory
+      ansible.builtin.stat:
+        path: /etc/systemd/system/pacemaker.service.d
+      register: common_pm_pacemaker_dir
+
+    - name: Assert pacemaker override directory exists
+      ansible.builtin.assert:
+        that:
+          - common_pm_pacemaker_dir.stat.exists
+          - common_pm_pacemaker_dir.stat.isdir
+
+    - name: Check pacemaker override conf
+      ansible.builtin.stat:
+        path: /etc/systemd/system/pacemaker.service.d/override.conf
+      register: common_pm_pacemaker_conf
+
+    - name: Assert pacemaker override exists
+      ansible.builtin.assert:
+        that:
+          - common_pm_pacemaker_conf.stat.exists
+
+    - name: Read pacemaker override
+      ansible.builtin.slurp:
+        path: /etc/systemd/system/pacemaker.service.d/override.conf
+      register: common_pm_pacemaker_content
+
+    - name: Assert pacemaker override content (no virtqemud by default)
+      ansible.builtin.assert:
+        that:
+          - "'Wants=libvirtd.service' in (common_pm_pacemaker_content.content | b64decode)"
+          - "'WantedBy=corosync.service' in (common_pm_pacemaker_content.content | b64decode)"
+          - "'virtqemud' not in (common_pm_pacemaker_content.content | b64decode)"
+        fail_msg: "pacemaker override content incorrect"
+
+    # --- OVS-vswitchd ---
+    - name: Check ovs-vswitchd override directory
+      ansible.builtin.stat:
+        path: /etc/systemd/system/ovs-vswitchd.service.d
+      register: common_pm_ovs_dir
+
+    - name: Assert ovs-vswitchd override directory exists
+      ansible.builtin.assert:
+        that:
+          - common_pm_ovs_dir.stat.exists
+          - common_pm_ovs_dir.stat.isdir
+
+    - name: Check ovs-vswitchd override conf
+      ansible.builtin.stat:
+        path: /etc/systemd/system/ovs-vswitchd.service.d/override.conf
+      register: common_pm_ovs_conf
+
+    - name: Assert ovs-vswitchd override exists
+      ansible.builtin.assert:
+        that:
+          - common_pm_ovs_conf.stat.exists
+
+    - name: Check team0 service file
+      ansible.builtin.stat:
+        path: /etc/systemd/system/team0_x@.service
+      register: common_pm_team0
+
+    - name: Assert team0 service file exists
+      ansible.builtin.assert:
+        that:
+          - common_pm_team0.stat.exists

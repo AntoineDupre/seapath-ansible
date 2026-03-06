@@ -1,0 +1,38 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  vars:
+    logstash_server_ip: "192.168.1.100"
+    team0_0: eth0
+    team0_1: eth1
+  tasks:
+    - name: Test sysctl configuration
+      ansible.builtin.include_role:
+        name: common_physical_machine
+        tasks_from: sysctl.yml
+
+    - name: Test chrony-wait configuration
+      ansible.builtin.include_role:
+        name: common_physical_machine
+        tasks_from: chrony_wait.yml
+
+    - name: Test logstash configuration
+      ansible.builtin.include_role:
+        name: common_physical_machine
+        tasks_from: logstash.yml
+
+    - name: Test libvirt configuration
+      ansible.builtin.include_role:
+        name: common_physical_machine
+        tasks_from: libvirt.yml
+
+    - name: Test pacemaker configuration
+      ansible.builtin.include_role:
+        name: common_physical_machine
+        tasks_from: pacemaker.yml
+
+    - name: Test ovs-vswitchd configuration
+      ansible.builtin.include_role:
+        name: common_physical_machine
+        tasks_from: ovs_vswitchd.yml
