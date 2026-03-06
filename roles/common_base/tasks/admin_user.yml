@@ -1,0 +1,69 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Retrieve user information for UID 1000
+  ansible.builtin.command: getent passwd 1000
+  register: common_base_user_info
+  changed_when: false
+  when: common_base_remove_old_admin | default(true)
+- name: Extract username from the result
+  ansible.builtin.set_fact:
+    common_base_old_admin_user: "{{ common_base_user_info.stdout.split(':')[0] }}"
+  when: common_base_remove_old_admin | default(true)
+
+- name: Removing or not the old admin user created by the iso
+  when:
+    - common_base_remove_old_admin | default(true)
+    - admin_user != common_base_old_admin_user
+  block:
+    - name: Remove old admin user from sudoers file
+      lineinfile:
+        dest: /etc/sudoers
+        state: absent
+        regexp: "^{{ common_base_old_admin_user }}"
+        validate: visudo -cf %s
+    - name: Remove the old admin user
+      ansible.builtin.user:
+        name: "{{ common_base_old_admin_user }}"
+        state: absent
+        remove: yes
+    - name: Remove the old admin group
+      ansible.builtin.group:
+        name: "{{ common_base_old_admin_user }}"
+        state: absent
+
+- name: Ensure admin group exists
+  ansible.builtin.group:
+    name: "{{ admin_user }}"
+    state: present
+    gid: 1000
+- name: Adding admin user
+  user:
+    name: "{{ admin_user }}"
+    shell: /bin/bash
+    group: "{{ admin_user }}"
+    uid: 1000
+    password: "{{ admin_passwd | default(omit) }}"
+    append: no
+  no_log: true
+- name: Add authorized keys to admin user
+  ansible.posix.authorized_key:
+    user: "{{ admin_user }}"
+    key: "{{ item }}"
+  with_items: "{{ admin_ssh_keys }}"
+  when: admin_ssh_keys is defined and admin_ssh_keys is iterable
+- name: Install sudo admin user rules
+  copy:
+    content: |
+      {{ admin_user }}   ALL=NOPASSWD:EXEC: ALL
+    dest: "/etc/sudoers.d/{{ admin_user }}"
+    owner: root
+    group: root
+    mode: '0440'
+- name: Remove admin sudoers line created by build_debian_iso
+  lineinfile:
+    dest: /etc/sudoers
+    state: absent
+    regexp: '^{{ admin_user }}'
+    validate: visudo -cf %s

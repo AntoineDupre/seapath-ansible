@@ -1,0 +1,20 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Disable vim defaults
+  lineinfile:
+    dest: "{{ vimrc_path }}"
+    regexp: '^"? *let g:skip_defaults_vim = 1$'
+    line: "let g:skip_defaults_vim = 1"
+    state: present
+- name: Vim color syntax
+  lineinfile:
+    dest: "{{ vimrc_path }}"
+    regexp: '^"? *syntax on$'
+    line: "syntax on"
+    state: present
+- name: Remove vimrc.local file
+  file:
+    path: "{{ vimrc_path }}.local"
+    state: absent

@@ -1,0 +1,14 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: PATH for admin user
+  lineinfile:
+    dest: "/home/{{ admin_user }}/.bash_profile"
+    regexp: '^export PATH'
+    line: "export PATH=$PATH:/usr/sbin:/usr/local/sbin:/sbin"
+    state: present
+    create: yes
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: '0644'

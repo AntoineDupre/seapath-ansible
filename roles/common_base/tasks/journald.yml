@@ -1,0 +1,10 @@
+# Copyright (C) 2024 RTE
+# SPDX-License-Identifier: Apache-2.0
+
+---
+- name: Copy journald conf file
+  ansible.builtin.copy:
+    src: journald.conf
+    dest: /etc/systemd/journald.conf
+    mode: '0644'
+  notify: Restart systemd-journald
