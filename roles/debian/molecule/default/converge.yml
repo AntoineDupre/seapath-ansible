@@ -1,0 +1,9 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  vars:
+    admin_user: testadmin
+    vimrc_path: /etc/vim/vimrc
+  roles:
+    - role: debian

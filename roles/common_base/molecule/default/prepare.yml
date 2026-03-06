@@ -1,0 +1,41 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Install vim
+      ansible.builtin.apt:
+        name: vim
+        state: present
+        update_cache: true
+
+    - name: Ensure /etc/syslog-ng directory exists
+      ansible.builtin.file:
+        path: /etc/syslog-ng
+        state: directory
+        mode: "0755"
+
+    - name: Create a dummy user with UID 1000 to be replaced
+      ansible.builtin.user:
+        name: oldadmin
+        uid: 1000
+        shell: /bin/bash
+        create_home: true
+
+    - name: Pre-copy syslog-ng.conf to prevent handler trigger
+      ansible.builtin.template:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/templates/syslog-ng.conf.j2"
+        dest: /etc/syslog-ng/syslog-ng.conf
+        mode: "0644"
+
+    - name: Create /var/log/syslog-ng directory
+      ansible.builtin.file:
+        path: /var/log/syslog-ng
+        state: directory
+        mode: "0755"
+
+    - name: Pre-copy journald.conf to prevent handler trigger
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/files/journald.conf"
+        dest: /etc/systemd/journald.conf
+        mode: "0644"

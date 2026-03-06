@@ -1,0 +1,147 @@
+---
+- name: Verify debian role (refactored with include_role to common_base)
+  hosts: all
+  gather_facts: false
+  vars:
+    admin_user: testadmin
+
+  tasks:
+    # --- Vim (via common_base) ---
+    - name: Read vimrc
+      ansible.builtin.slurp:
+        path: /etc/vim/vimrc
+      register: debian_vimrc
+
+    - name: Assert vim configured correctly
+      ansible.builtin.assert:
+        that:
+          - "'let g:skip_defaults_vim = 1' in (debian_vimrc.content | b64decode)"
+          - "'syntax on' in (debian_vimrc.content | b64decode)"
+
+    # --- Syslog-ng (via common_base) ---
+    - name: Check syslog-ng directory
+      ansible.builtin.stat:
+        path: /var/log/syslog-ng
+      register: debian_syslog_dir
+
+    - name: Assert syslog-ng directory exists
+      ansible.builtin.assert:
+        that:
+          - debian_syslog_dir.stat.exists
+          - debian_syslog_dir.stat.isdir
+
+    - name: Check syslog-ng config
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/syslog-ng.conf
+      register: debian_syslog_conf
+
+    - name: Assert syslog-ng config exists
+      ansible.builtin.assert:
+        that:
+          - debian_syslog_conf.stat.exists
+
+    # --- Journald (via common_base) ---
+    - name: Read journald.conf
+      ansible.builtin.slurp:
+        path: /etc/systemd/journald.conf
+      register: debian_journald
+
+    - name: Assert journald persistent storage
+      ansible.builtin.assert:
+        that:
+          - "'Storage=persistent' in (debian_journald.content | b64decode)"
+
+    # --- Admin user (via common_base, with old admin removal) ---
+    - name: Check old admin is removed
+      ansible.builtin.command: getent passwd oldadmin
+      register: debian_old_user
+      failed_when: false
+      changed_when: false
+
+    - name: Assert old admin removed
+      ansible.builtin.assert:
+        that:
+          - debian_old_user.rc != 0
+
+    - name: Check new admin user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: testadmin
+
+    - name: Check sudoers file
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/testadmin
+      register: debian_sudoers
+
+    - name: Assert sudoers file exists
+      ansible.builtin.assert:
+        that:
+          - debian_sudoers.stat.exists
+          - debian_sudoers.stat.mode == "0440"
+
+    # --- Sysctl (via common_base) ---
+    - name: Check panicreboot sysctl
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/00-panicreboot.conf
+      register: debian_panicreboot
+
+    - name: Assert panicreboot exists
+      ansible.builtin.assert:
+        that:
+          - debian_panicreboot.stat.exists
+
+    # --- Environment (via common_base) ---
+    - name: Read /etc/environment
+      ansible.builtin.slurp:
+        path: /etc/environment
+      register: debian_env
+
+    - name: Assert environment variables
+      ansible.builtin.assert:
+        that:
+          - "'HISTSIZE=2000000' in (debian_env.content | b64decode)"
+          - "'EDITOR=vim' in (debian_env.content | b64decode)"
+
+    # --- PATH (via common_base) ---
+    - name: Read bash_profile
+      ansible.builtin.slurp:
+        path: /home/testadmin/.bash_profile
+      register: debian_bash_profile
+
+    - name: Assert PATH export
+      ansible.builtin.assert:
+        that:
+          - "'export PATH=$PATH:/usr/sbin:/usr/local/sbin:/sbin' in (debian_bash_profile.content | b64decode)"
+
+    # --- GRUB (debian-specific, not extracted) ---
+    - name: Read /etc/default/grub
+      ansible.builtin.slurp:
+        path: /etc/default/grub
+      register: debian_grub
+
+    - name: Assert GRUB configuration
+      ansible.builtin.assert:
+        that:
+          - "'ipv6.disable=1' in (debian_grub.content | b64decode)"
+          - "'efi=runtime' in (debian_grub.content | b64decode)"
+          - "'fsck.mode=force' in (debian_grub.content | b64decode)"
+          - "'GRUB_DISABLE_OS_PROBER=true' in (debian_grub.content | b64decode)"
+        fail_msg: "GRUB configuration incorrect"
+
+    # --- FAI cleanup (debian-specific) ---
+    - name: Check FAI grub files removed
+      ansible.builtin.stat:
+        path: "/etc/default/grub.d/{{ item }}"
+      loop:
+        - 20_efi_ipv6.cfg
+        - 30_console.cfg
+      register: debian_fai_files
+
+    - name: Assert FAI files removed
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} should have been removed"
+      loop: "{{ debian_fai_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"

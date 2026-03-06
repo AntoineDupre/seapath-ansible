@@ -1,0 +1,137 @@
+---
+- name: Verify centos role (refactored with include_role to common_base)
+  hosts: all
+  gather_facts: false
+  vars:
+    admin_user: testadmin
+
+  tasks:
+    # --- Vim (via common_base, CentOS path) ---
+    - name: Read vimrc
+      ansible.builtin.slurp:
+        path: /etc/vimrc
+      register: centos_vimrc
+
+    - name: Assert vim configured correctly
+      ansible.builtin.assert:
+        that:
+          - "'let g:skip_defaults_vim = 1' in (centos_vimrc.content | b64decode)"
+          - "'syntax on' in (centos_vimrc.content | b64decode)"
+
+    # --- Syslog-ng (via common_base) ---
+    - name: Check syslog-ng directory
+      ansible.builtin.stat:
+        path: /var/log/syslog-ng
+      register: centos_syslog_dir
+
+    - name: Assert syslog-ng directory exists
+      ansible.builtin.assert:
+        that:
+          - centos_syslog_dir.stat.exists
+
+    - name: Check syslog-ng config
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/syslog-ng.conf
+      register: centos_syslog_conf
+
+    - name: Assert syslog-ng config exists
+      ansible.builtin.assert:
+        that:
+          - centos_syslog_conf.stat.exists
+
+    # --- Journald (via common_base) ---
+    - name: Read journald.conf
+      ansible.builtin.slurp:
+        path: /etc/systemd/journald.conf
+      register: centos_journald
+
+    - name: Assert journald persistent storage
+      ansible.builtin.assert:
+        that:
+          - "'Storage=persistent' in (centos_journald.content | b64decode)"
+
+    # --- Admin user (via common_base, NO old admin removal) ---
+    - name: Check admin user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: testadmin
+
+    - name: Check admin group exists
+      ansible.builtin.getent:
+        database: group
+        key: testadmin
+
+    - name: Check sudoers file
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/testadmin
+      register: centos_sudoers
+
+    - name: Assert sudoers file exists
+      ansible.builtin.assert:
+        that:
+          - centos_sudoers.stat.exists
+          - centos_sudoers.stat.mode == "0440"
+
+    # --- Sysctl (via common_base) ---
+    - name: Check panicreboot sysctl
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/00-panicreboot.conf
+      register: centos_panicreboot
+
+    - name: Assert panicreboot exists
+      ansible.builtin.assert:
+        that:
+          - centos_panicreboot.stat.exists
+
+    # --- Environment (via common_base) ---
+    - name: Read /etc/environment
+      ansible.builtin.slurp:
+        path: /etc/environment
+      register: centos_env
+
+    - name: Assert environment variables
+      ansible.builtin.assert:
+        that:
+          - "'HISTSIZE=2000000' in (centos_env.content | b64decode)"
+          - "'EDITOR=vim' in (centos_env.content | b64decode)"
+
+    # --- PATH (via common_base) ---
+    - name: Read bash_profile
+      ansible.builtin.slurp:
+        path: /home/testadmin/.bash_profile
+      register: centos_bash_profile
+
+    - name: Assert PATH export
+      ansible.builtin.assert:
+        that:
+          - "'export PATH=$PATH:/usr/sbin:/usr/local/sbin:/sbin' in (centos_bash_profile.content | b64decode)"
+
+    # --- GRUB (centos-specific) ---
+    - name: Read /etc/default/grub
+      ansible.builtin.slurp:
+        path: /etc/default/grub
+      register: centos_grub
+
+    - name: Assert GRUB_CMDLINE_LINUX_DEFAULT removed
+      ansible.builtin.assert:
+        that:
+          - "'GRUB_CMDLINE_LINUX_DEFAULT' not in (centos_grub.content | b64decode)"
+        fail_msg: "GRUB_CMDLINE_LINUX_DEFAULT should have been removed"
+
+    - name: Assert GRUB configuration
+      ansible.builtin.assert:
+        that:
+          - "'ipv6.disable=1' in (centos_grub.content | b64decode)"
+          - "'efi=runtime' in (centos_grub.content | b64decode)"
+          - "'GRUB_DISABLE_OS_PROBER=true' in (centos_grub.content | b64decode)"
+
+    # --- NetworkManager (centos-specific) ---
+    - name: Check NetworkManager is stopped
+      ansible.builtin.systemd:
+        name: NetworkManager.service
+      register: centos_nm_status
+
+    - name: Assert NetworkManager is disabled
+      ansible.builtin.assert:
+        that:
+          - not centos_nm_status.status.ActiveState == "active" or centos_nm_status.status.UnitFileState != "enabled"

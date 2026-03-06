@@ -1,0 +1,157 @@
+---
+- name: Verify common_base tasks
+  hosts: all
+  gather_facts: false
+  vars:
+    admin_user: testadmin
+
+  tasks:
+    # --- Vim ---
+    - name: Read vimrc
+      ansible.builtin.slurp:
+        path: /etc/vim/vimrc
+      register: common_base_vimrc
+
+    - name: Assert vim defaults disabled and syntax on
+      ansible.builtin.assert:
+        that:
+          - "'let g:skip_defaults_vim = 1' in (common_base_vimrc.content | b64decode)"
+          - "'syntax on' in (common_base_vimrc.content | b64decode)"
+        fail_msg: "vimrc missing expected configuration"
+
+    - name: Check vimrc.local is absent
+      ansible.builtin.stat:
+        path: /etc/vim/vimrc.local
+      register: common_base_vimrc_local
+
+    - name: Assert vimrc.local absent
+      ansible.builtin.assert:
+        that:
+          - not common_base_vimrc_local.stat.exists
+
+    # --- Syslog-ng ---
+    - name: Check syslog-ng log directory exists
+      ansible.builtin.stat:
+        path: /var/log/syslog-ng
+      register: common_base_syslog_dir
+
+    - name: Assert syslog-ng directory exists
+      ansible.builtin.assert:
+        that:
+          - common_base_syslog_dir.stat.exists
+          - common_base_syslog_dir.stat.isdir
+
+    - name: Check syslog-ng config file
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/syslog-ng.conf
+      register: common_base_syslog_conf
+
+    - name: Assert syslog-ng config exists
+      ansible.builtin.assert:
+        that:
+          - common_base_syslog_conf.stat.exists
+
+    # --- Journald ---
+    - name: Read journald.conf
+      ansible.builtin.slurp:
+        path: /etc/systemd/journald.conf
+      register: common_base_journald
+
+    - name: Assert journald uses persistent storage
+      ansible.builtin.assert:
+        that:
+          - "'Storage=persistent' in (common_base_journald.content | b64decode)"
+        fail_msg: "journald.conf missing Storage=persistent"
+
+    # --- Admin user ---
+    - name: Check old admin user is removed
+      ansible.builtin.command: getent passwd oldadmin
+      register: common_base_old_user
+      failed_when: false
+      changed_when: false
+
+    - name: Assert old admin user is absent
+      ansible.builtin.assert:
+        that:
+          - common_base_old_user.rc != 0
+        fail_msg: "Old admin user 'oldadmin' should have been removed"
+
+    - name: Check new admin user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: testadmin
+
+    - name: Check admin group exists
+      ansible.builtin.getent:
+        database: group
+        key: testadmin
+
+    - name: Check sudoers file exists
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/testadmin
+      register: common_base_sudoers
+
+    - name: Assert sudoers file exists with correct permissions
+      ansible.builtin.assert:
+        that:
+          - common_base_sudoers.stat.exists
+          - common_base_sudoers.stat.mode == "0440"
+        fail_msg: "sudoers file missing or wrong permissions"
+
+    - name: Read sudoers content
+      ansible.builtin.slurp:
+        path: /etc/sudoers.d/testadmin
+      register: common_base_sudoers_content
+
+    - name: Assert sudoers content is correct
+      ansible.builtin.assert:
+        that:
+          - "'testadmin   ALL=NOPASSWD:EXEC: ALL' in (common_base_sudoers_content.content | b64decode)"
+
+    # --- Sysctl ---
+    - name: Check panicreboot sysctl file
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/00-panicreboot.conf
+      register: common_base_panicreboot
+
+    - name: Assert panicreboot conf exists
+      ansible.builtin.assert:
+        that:
+          - common_base_panicreboot.stat.exists
+
+    - name: Read panicreboot content
+      ansible.builtin.slurp:
+        path: /etc/sysctl.d/00-panicreboot.conf
+      register: common_base_panicreboot_content
+
+    - name: Assert panicreboot content
+      ansible.builtin.assert:
+        that:
+          - "'kernel.panic = 20' in (common_base_panicreboot_content.content | b64decode)"
+
+    # --- Environment ---
+    - name: Read /etc/environment
+      ansible.builtin.slurp:
+        path: /etc/environment
+      register: common_base_environment
+
+    - name: Assert environment variables are set
+      ansible.builtin.assert:
+        that:
+          - "'HISTSIZE=2000000' in (common_base_environment.content | b64decode)"
+          - "'EDITOR=vim' in (common_base_environment.content | b64decode)"
+          - "'LIBVIRT_DEFAULT_URI=qemu:///system' in (common_base_environment.content | b64decode)"
+          - "'SYSTEMD_EDITOR=vim' in (common_base_environment.content | b64decode)"
+        fail_msg: "Missing expected environment variables"
+
+    # --- PATH config ---
+    - name: Read admin user bash_profile
+      ansible.builtin.slurp:
+        path: /home/testadmin/.bash_profile
+      register: common_base_bash_profile
+
+    - name: Assert PATH export is present
+      ansible.builtin.assert:
+        that:
+          - "'export PATH=$PATH:/usr/sbin:/usr/local/sbin:/sbin' in (common_base_bash_profile.content | b64decode)"
+        fail_msg: "PATH export missing from .bash_profile"

@@ -1,0 +1,149 @@
+---
+- name: Verify oraclelinux role (refactored with include_role to common_base)
+  hosts: all
+  gather_facts: false
+  vars:
+    admin_user: testadmin
+
+  tasks:
+    # --- Vim (via common_base, /etc/vimrc path) ---
+    - name: Read vimrc
+      ansible.builtin.slurp:
+        path: /etc/vimrc
+      register: oraclelinux_vimrc
+
+    - name: Assert vim configured correctly
+      ansible.builtin.assert:
+        that:
+          - "'let g:skip_defaults_vim = 1' in (oraclelinux_vimrc.content | b64decode)"
+          - "'syntax on' in (oraclelinux_vimrc.content | b64decode)"
+
+    # --- Syslog-ng (via common_base) ---
+    - name: Check syslog-ng directory
+      ansible.builtin.stat:
+        path: /var/log/syslog-ng
+      register: oraclelinux_syslog_dir
+
+    - name: Assert syslog-ng directory exists
+      ansible.builtin.assert:
+        that:
+          - oraclelinux_syslog_dir.stat.exists
+
+    - name: Check syslog-ng config
+      ansible.builtin.stat:
+        path: /etc/syslog-ng/syslog-ng.conf
+      register: oraclelinux_syslog_conf
+
+    - name: Assert syslog-ng config exists
+      ansible.builtin.assert:
+        that:
+          - oraclelinux_syslog_conf.stat.exists
+
+    # --- Journald (via common_base) ---
+    - name: Read journald.conf
+      ansible.builtin.slurp:
+        path: /etc/systemd/journald.conf
+      register: oraclelinux_journald
+
+    - name: Assert journald persistent storage
+      ansible.builtin.assert:
+        that:
+          - "'Storage=persistent' in (oraclelinux_journald.content | b64decode)"
+
+    # --- Admin user (via common_base, WITH old admin removal) ---
+    - name: Check old admin is removed
+      ansible.builtin.command: getent passwd oldadmin
+      register: oraclelinux_old_user
+      failed_when: false
+      changed_when: false
+
+    - name: Assert old admin removed
+      ansible.builtin.assert:
+        that:
+          - oraclelinux_old_user.rc != 0
+
+    - name: Check new admin user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: testadmin
+
+    - name: Check sudoers file
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/testadmin
+      register: oraclelinux_sudoers
+
+    - name: Assert sudoers file exists
+      ansible.builtin.assert:
+        that:
+          - oraclelinux_sudoers.stat.exists
+          - oraclelinux_sudoers.stat.mode == "0440"
+
+    # --- Sysctl (via common_base) ---
+    - name: Check panicreboot sysctl
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/00-panicreboot.conf
+      register: oraclelinux_panicreboot
+
+    - name: Assert panicreboot exists
+      ansible.builtin.assert:
+        that:
+          - oraclelinux_panicreboot.stat.exists
+
+    # --- Environment (via common_base) ---
+    - name: Read /etc/environment
+      ansible.builtin.slurp:
+        path: /etc/environment
+      register: oraclelinux_env
+
+    - name: Assert environment variables
+      ansible.builtin.assert:
+        that:
+          - "'HISTSIZE=2000000' in (oraclelinux_env.content | b64decode)"
+          - "'EDITOR=vim' in (oraclelinux_env.content | b64decode)"
+
+    # --- PATH (via common_base) ---
+    - name: Read bash_profile
+      ansible.builtin.slurp:
+        path: /home/testadmin/.bash_profile
+      register: oraclelinux_bash_profile
+
+    - name: Assert PATH export
+      ansible.builtin.assert:
+        that:
+          - "'export PATH=$PATH:/usr/sbin:/usr/local/sbin:/sbin' in (oraclelinux_bash_profile.content | b64decode)"
+
+    # --- Firewalld (oraclelinux-specific) ---
+    - name: Check firewalld is stopped
+      ansible.builtin.systemd:
+        name: firewalld.service
+      register: oraclelinux_firewalld
+
+    - name: Assert firewalld is disabled
+      ansible.builtin.assert:
+        that:
+          - oraclelinux_firewalld.status.UnitFileState != "enabled"
+
+    # --- GRUB (oraclelinux-specific, same as debian) ---
+    - name: Read /etc/default/grub
+      ansible.builtin.slurp:
+        path: /etc/default/grub
+      register: oraclelinux_grub
+
+    - name: Assert GRUB configuration
+      ansible.builtin.assert:
+        that:
+          - "'ipv6.disable=1' in (oraclelinux_grub.content | b64decode)"
+          - "'efi=runtime' in (oraclelinux_grub.content | b64decode)"
+          - "'fsck.mode=force' in (oraclelinux_grub.content | b64decode)"
+          - "'GRUB_DISABLE_OS_PROBER=true' in (oraclelinux_grub.content | b64decode)"
+
+    # --- NetworkManager (oraclelinux-specific) ---
+    - name: Check NetworkManager is stopped
+      ansible.builtin.systemd:
+        name: NetworkManager.service
+      register: oraclelinux_nm_status
+
+    - name: Assert NetworkManager is disabled
+      ansible.builtin.assert:
+        that:
+          - not oraclelinux_nm_status.status.ActiveState == "active" or oraclelinux_nm_status.status.UnitFileState != "enabled"

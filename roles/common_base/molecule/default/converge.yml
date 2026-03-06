@@ -1,0 +1,42 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  vars:
+    admin_user: testadmin
+    vimrc_path: /etc/vim/vimrc
+  tasks:
+    - name: Test vim configuration
+      ansible.builtin.include_role:
+        name: common_base
+        tasks_from: vim.yml
+
+    - name: Test syslog-ng configuration
+      ansible.builtin.include_role:
+        name: common_base
+        tasks_from: syslog.yml
+
+    - name: Test journald configuration
+      ansible.builtin.include_role:
+        name: common_base
+        tasks_from: journald.yml
+
+    - name: Test admin user management
+      ansible.builtin.include_role:
+        name: common_base
+        tasks_from: admin_user.yml
+
+    - name: Test sysctl configuration
+      ansible.builtin.include_role:
+        name: common_base
+        tasks_from: sysctl.yml
+
+    - name: Test environment configuration
+      ansible.builtin.include_role:
+        name: common_base
+        tasks_from: environment.yml
+
+    - name: Test PATH configuration
+      ansible.builtin.include_role:
+        name: common_base
+        tasks_from: path_config.yml

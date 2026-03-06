@@ -1,0 +1,75 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - vim
+        state: present
+        update_cache: true
+
+    - name: Ensure /etc/syslog-ng directory exists
+      ansible.builtin.file:
+        path: /etc/syslog-ng
+        state: directory
+        mode: "0755"
+
+    - name: Create a dummy user with UID 1000 to be replaced
+      ansible.builtin.user:
+        name: oldadmin
+        uid: 1000
+        shell: /bin/bash
+        create_home: true
+
+    - name: Pre-copy syslog-ng.conf to prevent handler trigger
+      ansible.builtin.template:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../common_base/templates/syslog-ng.conf.j2"
+        dest: /etc/syslog-ng/syslog-ng.conf
+        mode: "0644"
+
+    - name: Create /var/log/syslog-ng directory
+      ansible.builtin.file:
+        path: /var/log/syslog-ng
+        state: directory
+        mode: "0755"
+
+    - name: Pre-copy journald.conf to prevent handler trigger
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../common_base/files/journald.conf"
+        dest: /etc/systemd/journald.conf
+        mode: "0644"
+
+    - name: Create /etc/default/grub with default content
+      ansible.builtin.copy:
+        dest: /etc/default/grub
+        content: |
+          GRUB_DEFAULT=0
+          GRUB_TIMEOUT=5
+          GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+          GRUB_CMDLINE_LINUX=""
+        mode: "0644"
+
+    - name: Create /etc/default/grub.d directory
+      ansible.builtin.file:
+        path: /etc/default/grub.d
+        state: directory
+        mode: "0755"
+
+    - name: Create FAI grub config files to be removed
+      ansible.builtin.copy:
+        dest: "/etc/default/grub.d/{{ item }}"
+        content: "dummy\n"
+        mode: "0644"
+      loop:
+        - 20_efi_ipv6.cfg
+        - 30_console.cfg
+
+    - name: Create mock update-grub command
+      ansible.builtin.copy:
+        dest: /usr/sbin/update-grub
+        content: |
+          #!/bin/bash
+          exit 0
+        mode: "0755"
